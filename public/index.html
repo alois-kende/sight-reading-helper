@@ -79,17 +79,10 @@ h1 .ib{margin-left:10px;position:relative;top:-3px}
 .rdot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--rec);margin-right:7px;vertical-align:middle;animation:rp 1.6s infinite}
 @keyframes rp{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--rec) 55%,transparent)}70%,100%{box-shadow:0 0 0 7px transparent}}
 @media(prefers-reduced-motion:reduce){.rdot{animation:none}}
-.lvrow{display:flex;align-items:stretch;gap:6px}
-.lvrow #lv{flex:1 1 0;min-width:0;width:auto}
-.kb{flex:0 0 64px;height:230px;overflow-y:auto;overflow-x:hidden;position:relative;border:1px solid var(--line);border-radius:8px;background:#f7f7f4;scrollbar-width:thin;touch-action:pan-y;user-select:none;-webkit-user-select:none}
-.ki{position:relative}
-.kb .wk,.kb .bk{position:absolute;left:0;cursor:pointer}
-.kb .wk{right:0;background:#f7f7f4;border-bottom:1px solid #b9c1cf;color:#14213d;font:10px/1 system-ui,sans-serif;display:flex;align-items:center;justify-content:flex-end;padding-right:4px}
-.kb .bk{width:60%;background:#1b1b1f;border-radius:0 3px 3px 0;z-index:2}
-.kb .wk.rng{background:color-mix(in srgb,var(--ok) 20%,#f7f7f4)}
-.kb .bk.rng{background:#2b4538}
-.kb .wk.dn{background:color-mix(in srgb,var(--bad) 45%,#f7f7f4)}
-.kb .bk.dn{background:var(--bad)}
+.lvrow{display:flex;align-items:stretch}
+.lvrow #lv{flex:1 1 0;min-width:0;width:auto;border-radius:0 8px 8px 0}
+#kb{flex:0 0 58px;width:58px;border:1px solid var(--line);border-right:0;border-radius:8px 0 0 8px;touch-action:none}
+.bar .pick input[type=text]{width:100%;text-overflow:ellipsis}
 </style></head><body><main id="app"></main>
 <script>
 const $ = s => document.querySelector(s), app = $('#app');
@@ -302,14 +295,14 @@ function playerView() {
     <label><input type="radio" name="me" value="${t.key}" ${t.key === mine ? 'checked' : ''}> Me</label>
     <select data-i="${t.key}" aria-label="Instrument">${opts(t.key)}</select></div></div>`).join('')}<div class="trow" style="height:${TH}px;display:flex;align-items:center;gap:8px"><span class="lb" style="flex:none">Tempo</span><span class="mut" id="tcur" style="font-size:12px"></span></div></div>
     <div class="cvw"><canvas id="cv" style="height:${Y0 + tracks.length * LH + TH}px"></canvas></div></div></div>
-  <div class="live"><div class="big"><span id="det">–</span><span id="tgt" class="mut">–</span></div><div class="lvrow"><div id="kb" class="kb" role="group" aria-label="Piano keys: click a key to hear the note"></div><canvas id="lv" style="height:230px"></canvas></div><div class="mut" id="lvl" style="font-size:12px"></div>
+  <div class="live"><div class="big"><span id="det">–</span><span id="tgt" class="mut">–</span></div><div class="lvrow"><canvas id="kb" style="height:230px" aria-label="Note keys: click to hear a note"></canvas><canvas id="lv" style="height:230px"></canvas></div><div class="mut" id="lvl" style="font-size:12px"></div>
   <div class="meter"><div class="zone"></div><div class="mid"></div><div class="needle" id="nd"></div></div></div></div>
   <div id="res" class="card"></div>
-  <div class="mut" id="sc">Space: play/stop. Click the timeline to set the start point; stop returns to it. Wheel zooms, shift+wheel or drag pans. Headphones required. Mic on and “Me” selected = scored run. Dots show true pitch; hollow = right note, other octave. Click the piano keys beside the live view to hear a note (e.g. your starting pitch).</div>`;
+  <div class="mut" id="sc">Space: play/stop. Click the timeline to set the start point; stop returns to it. Wheel zooms, shift+wheel or drag pans. Headphones required. Mic on and “Me” selected = scored run. Dots show true pitch; hollow = right note, other octave. Click a key beside the live view to hear that note (e.g. your starting pitch); NEXT marks the next note to sing.</div>`;
   $('#back').onclick = listView; bindPicker();
   app.querySelectorAll('[name=me]').forEach(r => r.onchange = () => {
     mine = r.value; sessionStorage.setItem('mine:' + cur.id, mine); rec = []; res = null; renderRes();
-    app.querySelectorAll('.trow').forEach(x => x.classList.toggle('me', x.dataset.k === mine)); kbSync(true); dirty = true;
+    app.querySelectorAll('.trow').forEach(x => x.classList.toggle('me', x.dataset.k === mine)); dirty = true;
   });
   app.querySelectorAll('[data-m]').forEach(b => b.onclick = () => {
     const k = b.dataset.m; muted.has(k) ? muted.delete(k) : muted.add(k);
@@ -340,7 +333,7 @@ function playerView() {
   $('#rs').onclick = () => { rec = []; res = null; hist = []; resetTrack(); renderRes(); dirty = true; };
   const W = () => $('#cv').clientWidth;
   $('#zi').onclick = () => zoomAt(W() / 2, 1.6); $('#zo').onclick = () => zoomAt(W() / 2, 1 / 1.6); $('#zf').onclick = fitView;
-  bindTl(); fitView(); buildKb(); renderRes(); loopId++; frame(loopId);
+  bindTl(); fitView(); bindKb(); renderRes(); loopId++; frame(loopId);
 }
 
 function setTempo(v) {
@@ -522,37 +515,44 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('keyup', e => { if (e.code === 'Space' && $('#cv')) e.preventDefault(); });
 
-/* ---------- piano keys beside the live view ---------- */
-const KLO = 36, KHI = 84, WH = 22, BH = 13, isBlk = m => [1, 3, 6, 8, 10].includes(m % 12);
-let kbY = {}, kbOut = null;
-function buildKb() {
-  const kb = $('#kb'); if (!kb) return;
-  let nw = 0; for (let m = KLO; m <= KHI; m++) if (!isBlk(m)) nw++;
-  let html = '', wi = 0; kbY = {};
-  for (let m = KLO; m <= KHI; m++) {
-    if (!isBlk(m)) {
-      const y = (nw - 1 - wi) * WH; kbY[m] = y + WH / 2; wi++;
-      html += `<div class="wk" data-m="${m}" aria-label="${nnO(m)}" style="top:${y}px;height:${WH}px">${m % 12 === 0 ? '<span>' + nnO(m) + '</span>' : ''}</div>`;
-    } else {
-      const y = (nw - wi) * WH; kbY[m] = y;
-      html += `<div class="bk" data-m="${m}" aria-label="${nnO(m)}" style="top:${y - BH / 2}px;height:${BH}px"></div>`;
-    }
+/* ---------- semitone keys beside the live view (same pitch axis as the live canvas) ---------- */
+const isBlk = m => [1, 3, 6, 8, 10].includes(((m % 12) + 12) % 12);
+let kbGeo = null, kbFlash = { m: -1, until: 0 }, kbOut = null;
+function drawKb(T, lo, hi, next) {
+  const cv = $('#kb'); if (!cv) return;
+  const W = cv.clientWidth, H = cv.clientHeight, r = window.devicePixelRatio || 1;
+  if (cv.width !== Math.round(W * r) || cv.height !== Math.round(H * r)) { cv.width = Math.round(W * r); cv.height = Math.round(H * r); }
+  const g = cv.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0); g.clearRect(0, 0, W, H);
+  if (!T) { kbGeo = null; return; }
+  const cs = getComputedStyle(document.documentElement), col = n => cs.getPropertyValue(n).trim();
+  const step = (H - 24) / (hi - lo), Y = m => H - 12 - (m - lo) / (hi - lo) * (H - 24);
+  kbGeo = { lo, hi, H };
+  const flash = performance.now() < kbFlash.until ? kbFlash.m : -1;
+  g.textBaseline = 'middle'; g.textAlign = 'right'; g.font = Math.round(Math.max(8, Math.min(11, step - 3))) + 'px system-ui';
+  for (let m = Math.ceil(lo); m <= Math.floor(hi); m++) {
+    const y = Y(m), blk = isBlk(m), top = y - step / 2;
+    g.fillStyle = m === flash ? col('--bad') : blk ? '#1b1b1f' : '#f7f7f4'; g.fillRect(0, top, W, step);
+    if (m !== flash && m >= T.lo && m <= T.hi) { g.fillStyle = col('--zone'); g.fillRect(0, top, W, step); }
+    g.fillStyle = 'rgba(120,130,150,.45)'; g.fillRect(0, top + step - .5, W, 1);
+    const c = ((m % 12) + 12) % 12 === 0;
+    if (step >= 11 || c) { g.fillStyle = m === flash ? '#fff' : blk ? '#d9dee8' : '#14213d'; g.fillText(nn(m) + (c ? Math.floor(m / 12) - 1 : ''), W - 5, y); }
   }
-  kb.innerHTML = `<div class="ki" style="height:${nw * WH}px">${html}</div>`;
-  kb.onclick = e => {
-    const k = e.target.closest('[data-m]'); if (!k) return;
-    keyPlay(+k.dataset.m); k.classList.add('dn'); setTimeout(() => k.classList.remove('dn'), 220);
-  };
-  kbSync(true);
+  if (next) {
+    const y = Y(next.m), h = Math.max(step, 15);
+    g.fillStyle = '#ffb703'; g.fillRect(0, y - h / 2, W, h);
+    g.strokeStyle = '#14213d'; g.lineWidth = 1; g.strokeRect(.5, y - h / 2 + .5, W - 1, h - 1);
+    g.fillStyle = '#14213d'; g.font = 'bold 10px system-ui'; g.textAlign = 'center'; g.fillText('NEXT ▸', W / 2, y + .5);
+  }
 }
-function kbSync(scroll) {
-  const kb = $('#kb'); if (!kb) return;
-  const T = tracks.find(x => x.key === mine);
-  kb.querySelectorAll('[data-m]').forEach(k => k.classList.toggle('rng', !!T && +k.dataset.m >= T.lo && +k.dataset.m <= T.hi));
-  if (scroll) {
-    const c = T ? (T.lo + T.hi) / 2 : 60, m = Math.round(Math.max(KLO, Math.min(KHI, c)));
-    kb.scrollTop = Math.max(0, kbY[m] - kb.clientHeight / 2);
-  }
+function bindKb() {
+  const cv = $('#kb'); if (!cv) return;
+  cv.onpointerdown = e => {
+    e.preventDefault(); if (!kbGeo) return;
+    const y = e.clientY - cv.getBoundingClientRect().top - cv.clientTop, { lo, hi, H } = kbGeo;
+    const m = Math.round(lo + (H - 12 - y) / (H - 24) * (hi - lo));
+    if (m < Math.ceil(lo) || m > Math.floor(hi)) return;
+    keyPlay(m); kbFlash = { m, until: performance.now() + 250 }; dirty = true; setTimeout(() => { dirty = true; }, 270);
+  };
 }
 function keyPlay(m) {
   ensureCtx();
@@ -629,7 +629,7 @@ function drawLive() {
   const g = cv.getContext('2d'), cs = getComputedStyle(document.documentElement), col = n => cs.getPropertyValue(n).trim();
   g.setTransform(r, 0, 0, r, 0, 0); g.clearRect(0, 0, W, H); g.font = '12px system-ui'; g.textBaseline = 'middle';
   const T = tracks.find(x => x.key === mine);
-  if (!T) { g.fillStyle = col('--mut'); g.fillText('Select “Me” on a track to see the line to match.', 12, 24); return; }
+  if (!T) { g.fillStyle = col('--mut'); g.fillText('Select “Me” on a track to see the line to match.', 12, 24); drawKb(null); return; }
   const pp = playing ? Math.max(posNow(), anchorPos) : startPos, SPAN = 6, t0 = pp - 2, pxs = W / SPAN, X = t => (t - t0) * pxs;
   const lo = T.lo - 2, hi = T.hi + 2, Y = m => H - 12 - (m - lo) / (hi - lo) * (H - 24);
   g.strokeStyle = col('--line');
@@ -654,6 +654,7 @@ function drawLive() {
     g.lineWidth = 1;
   }
   g.fillStyle = col('--bad'); g.fillRect(X(pp) - 1, 0, 2, H);
+  drawKb(T, lo, hi, T.notes.find(n => n.t >= pp - 0.02));
 }
 
 /* ---------- mic + pitch ---------- */
