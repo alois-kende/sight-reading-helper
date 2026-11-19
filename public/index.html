@@ -49,13 +49,15 @@ textarea{background:var(--card);border:1px solid var(--line);border-radius:8px;p
 .hide{display:none}
 select{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:6px;font:inherit;min-height:32px}
 .tl{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card)}
-.gut{flex:0 0 172px;border-right:1px solid var(--line)}
+.gut{flex:0 0 190px;border-right:1px solid var(--line)}
 .gut .sp{border-bottom:1px solid var(--line)}
 .trow{padding:5px 6px;border-bottom:1px solid var(--line);overflow:hidden}
 .trow.me{background:var(--zone)}
 .trow .lb{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ctl{display:flex;gap:4px;align-items:center;margin-top:5px}
-.ctl button{min-height:28px;padding:0 8px;font-size:12px}
+.ctl button{min-height:28px;padding:0 7px;font-size:12px}
+button.sol{background:#ffb703;color:#14213d;border-color:#ffb703}
+.ctl button.dim{opacity:.4}
 .ctl label{font-size:12px;white-space:nowrap}
 .ctl select{min-width:0;flex:1;font-size:12px;min-height:28px}
 .cvw{flex:1;min-width:0}
@@ -213,12 +215,18 @@ function parseMidi(buf) {
 /* ---------- state ---------- */
 const INST = { sine: 'Sine', piano: 'Piano', organ: 'Organ', choir: 'Choir', strings: 'Strings', flute: 'Flute' };
 const guess = n => /string|violin|synth|d'bass/i.test(n) ? 'strings' : 'piano';
-let pieces = [], cur = null, song = null, tracks = [], mine = null, muted = new Set(), inst = {}, ov = {}, vol = {};
+let pieces = [], cur = null, song = null, tracks = [], mine = null, muted = new Set(), solo = new Set(), inst = {}, ov = {}, vol = {};
 let tempo = 1, ctx, master, lfoG, gains = {}, playing = false, startPos = 0, anchorCtx = 0, anchorPos = 0, sched = [], timer = null;
 let rec = [], res = null, lat = 0.12, mvol = 1, an, micOn = false, hist = [], okN = 0, totN = 0, loopId = 0, view = { t0: 0, pps: 50 }, dirty = true;
 const LH = 60, RH = 26, TH = 34, Y0 = RH;
 try { const sv = localStorage.getItem("lat"); if (sv !== null) lat = +sv; const mv = localStorage.getItem("mvol"); if (mv !== null) mvol = +mv; } catch (e) { }
 
+const audible = k => !muted.has(k) && (!solo.size || solo.has(k));
+function refreshMix() {
+  app.querySelectorAll('[data-m]').forEach(b => { const k = b.dataset.m; b.className = muted.has(k) ? 'on' : (solo.size && !solo.has(k) ? 'dim' : ''); });
+  app.querySelectorAll('[data-s]').forEach(b => { b.className = solo.has(b.dataset.s) ? 'sol' : ''; b.setAttribute('aria-pressed', solo.has(b.dataset.s)); });
+  Object.keys(gains).forEach(k => { gains[k].gain.value = audible(k) ? vol[k] : 0; }); dirty = true;
+}
 const orderTracks = (parsed, meta, all) => {
   const by = Object.fromEntries(parsed.tracks.map(t => [t.key, t])), out = [];
   const add = (t, label, hidden, i) => { const ms = t.notes.map(n => n.m); out.push({ ...t, label, hidden, inst: INST[i] ? i : guess(t.name), lo: Math.min(...ms), hi: Math.max(...ms) }); };
@@ -279,7 +287,7 @@ async function openPiece(id) {
   try { vol = JSON.parse(localStorage.getItem('vol:' + id) || '{}'); } catch (e) { vol = {}; }
   tracks.forEach(t => { if (typeof vol[t.key] !== 'number') vol[t.key] = 1; });
   mine = sessionStorage.getItem('mine:' + id); if (!tracks.some(t => t.key === mine)) mine = null;
-  muted = new Set(); startPos = 0; rec = []; res = null; app.className = ''; playerView();
+  muted = new Set(); solo = new Set(); startPos = 0; rec = []; res = null; app.className = ''; playerView();
 }
 
 function playerView() {
@@ -291,7 +299,7 @@ function playerView() {
   <div class="bar"><label class="mut">Volume <input id="mv" type="range" min="0" max="150" step="5" value="${Math.round(mvol * 100)}"></label><label class="mut">Tempo <input id="tp" type="range" min="25" max="250" step="5" value="${Math.round(tempo * 100)}"> <span id="tv">${Math.round(tempo * 100)}%</span></label>
     <button id="t100">100%</button><button id="zo" aria-label="Zoom out">−</button><button id="zi" aria-label="Zoom in">+</button><button id="zf">Fit</button></div>
   <div class="split"><div class="tlwrap"><div class="tl"><div class="gut"><div class="sp" style="height:${RH}px"></div>${tracks.map(t => `<div class="trow ${t.key === mine ? 'me' : ''}" data-k="${t.key}" style="height:${LH}px">
-    <div class="top"><span class="lb">${esc(t.label)}</span><input type="range" class="vol" data-v="${t.key}" min="0" max="150" step="5" value="${Math.round(vol[t.key] * 100)}" aria-label="Volume"></div><div class="ctl"><button data-m="${t.key}" class="${muted.has(t.key) ? 'on' : ''}" aria-label="Mute">M</button>
+    <div class="top"><span class="lb">${esc(t.label)}</span><input type="range" class="vol" data-v="${t.key}" min="0" max="150" step="5" value="${Math.round(vol[t.key] * 100)}" aria-label="Volume"></div><div class="ctl"><button data-m="${t.key}" aria-label="Mute">M</button><button data-s="${t.key}" aria-label="Solo" aria-pressed="false">S</button>
     <label><input type="radio" name="me" value="${t.key}" ${t.key === mine ? 'checked' : ''}> Me</label>
     <select data-i="${t.key}" aria-label="Instrument">${opts(t.key)}</select></div></div>`).join('')}<div class="trow" style="height:${TH}px;display:flex;align-items:center;gap:8px"><span class="lb" style="flex:none">Tempo</span><span class="mut" id="tcur" style="font-size:12px"></span></div></div>
     <div class="cvw"><canvas id="cv" style="height:${Y0 + tracks.length * LH + TH}px"></canvas></div></div></div>
@@ -305,8 +313,10 @@ function playerView() {
     app.querySelectorAll('.trow').forEach(x => x.classList.toggle('me', x.dataset.k === mine)); dirty = true;
   });
   app.querySelectorAll('[data-m]').forEach(b => b.onclick = () => {
-    const k = b.dataset.m; muted.has(k) ? muted.delete(k) : muted.add(k);
-    b.className = muted.has(k) ? 'on' : ''; if (gains[k]) gains[k].gain.value = muted.has(k) ? 0 : vol[k]; dirty = true;
+    const k = b.dataset.m; muted.has(k) ? muted.delete(k) : muted.add(k); refreshMix();
+  });
+  app.querySelectorAll('[data-s]').forEach(b => b.onclick = () => {
+    const k = b.dataset.s; solo.has(k) ? solo.delete(k) : solo.add(k); refreshMix();
   });
   app.querySelectorAll('[data-i]').forEach(s => s.onchange = () => {
     inst[s.dataset.i] = s.value; ov[s.dataset.i] = s.value;
@@ -315,7 +325,7 @@ function playerView() {
   app.querySelectorAll('[data-v]').forEach(r => {
     r.oninput = () => {
       const k = r.dataset.v; vol[k] = r.value / 100; try { localStorage.setItem('vol:' + cur.id, JSON.stringify(vol)); } catch (e) { }
-      if (gains[k] && !muted.has(k)) gains[k].gain.value = vol[k];
+      if (gains[k] && audible(k)) gains[k].gain.value = vol[k];
     };
     r.ondblclick = () => { r.value = 100; r.oninput(); };
   });
@@ -333,7 +343,7 @@ function playerView() {
   $('#rs').onclick = () => { rec = []; res = null; hist = []; resetTrack(); renderRes(); dirty = true; };
   const W = () => $('#cv').clientWidth;
   $('#zi').onclick = () => zoomAt(W() / 2, 1.6); $('#zo').onclick = () => zoomAt(W() / 2, 1 / 1.6); $('#zf').onclick = fitView;
-  bindTl(); fitView(); bindKb(); renderRes(); loopId++; frame(loopId);
+  bindTl(); fitView(); bindKb(); refreshMix(); renderRes(); loopId++; frame(loopId);
 }
 
 function setTempo(v) {
@@ -407,7 +417,7 @@ function draw() {
   });
   tracks.forEach((t, i) => {
     const y = Y0 + i * LH, sp = Math.max(12, t.hi - t.lo);
-    g.fillStyle = muted.has(t.key) ? col('--line') : col('--acc');
+    g.fillStyle = audible(t.key) ? col('--acc') : col('--line');
     for (const n of t.notes) {
       if (n.t > tEnd) break; if (n.t + n.d < t0) continue;
       g.fillRect(X(n.t), y + LH - 8 - (n.m - t.lo) / sp * (LH - 16) - 2, Math.max(1.5, n.d * pps - 1), 4);
@@ -456,7 +466,7 @@ function startPlay(pos, ci, keep) {
     lead = nb * beat;
   }
   anchorCtx = t0 + lead; anchorPos = pos; playing = true; gains = {}; if (!keep) { rec = []; res = null; renderRes(); resetTrack(); }
-  tracks.forEach(t => { const g = ctx.createGain(); g.gain.value = muted.has(t.key) ? 0 : vol[t.key]; g.connect(master); gains[t.key] = g; });
+  tracks.forEach(t => { const g = ctx.createGain(); g.gain.value = audible(t.key) ? vol[t.key] : 0; g.connect(master); gains[t.key] = g; });
   sched = tracks.map(t => { const i = t.notes.findIndex(n => n.t >= pos); return { i: i < 0 ? t.notes.length : i }; });
   tracks.forEach(t => { for (const n of t.notes) { if (n.t >= pos) break; if (n.t + n.d > pos + 0.03) voice(t, n, pos); } });
   clearInterval(timer); timer = setInterval(pump, 60); pump(); $('#play').textContent = 'Stop';
@@ -538,10 +548,9 @@ function drawKb(T, lo, hi, next) {
     if (step >= 11 || c) { g.fillStyle = m === flash ? '#fff' : blk ? '#d9dee8' : '#14213d'; g.fillText(nn(m) + (c ? Math.floor(m / 12) - 1 : ''), W - 5, y); }
   }
   if (next) {
-    const y = Y(next.m), h = Math.max(step, 15);
-    g.fillStyle = '#ffb703'; g.fillRect(0, y - h / 2, W, h);
-    g.strokeStyle = '#14213d'; g.lineWidth = 1; g.strokeRect(.5, y - h / 2 + .5, W - 1, h - 1);
-    g.fillStyle = '#14213d'; g.font = 'bold 10px system-ui'; g.textAlign = 'center'; g.fillText('NEXT ▸', W / 2, y + .5);
+    const y = Y(next.m);
+    g.fillStyle = '#ffb703'; g.fillRect(0, y - step / 2, W, step - 1);
+    if (step >= 9) { g.fillStyle = '#14213d'; g.font = 'bold 8px system-ui'; g.textAlign = 'left'; g.fillText('NEXT', 4, y + .5); }
   }
 }
 function bindKb() {
@@ -654,7 +663,7 @@ function drawLive() {
     g.lineWidth = 1;
   }
   g.fillStyle = col('--bad'); g.fillRect(X(pp) - 1, 0, 2, H);
-  drawKb(T, lo, hi, T.notes.find(n => n.t >= pp - 0.02));
+  drawKb(T, lo, hi, playing ? null : T.notes.find(n => n.t >= pp - 0.02));
 }
 
 /* ---------- mic + pitch ---------- */
