@@ -79,6 +79,17 @@ h1 .ib{margin-left:10px;position:relative;top:-3px}
 .rdot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--rec);margin-right:7px;vertical-align:middle;animation:rp 1.6s infinite}
 @keyframes rp{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--rec) 55%,transparent)}70%,100%{box-shadow:0 0 0 7px transparent}}
 @media(prefers-reduced-motion:reduce){.rdot{animation:none}}
+.lvrow{display:flex;align-items:stretch;gap:6px}
+.lvrow #lv{flex:1 1 0;min-width:0;width:auto}
+.kb{flex:0 0 64px;height:230px;overflow-y:auto;overflow-x:hidden;position:relative;border:1px solid var(--line);border-radius:8px;background:#f7f7f4;scrollbar-width:thin;touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.ki{position:relative}
+.kb .wk,.kb .bk{position:absolute;left:0;cursor:pointer}
+.kb .wk{right:0;background:#f7f7f4;border-bottom:1px solid #b9c1cf;color:#14213d;font:10px/1 system-ui,sans-serif;display:flex;align-items:center;justify-content:flex-end;padding-right:4px}
+.kb .bk{width:60%;background:#1b1b1f;border-radius:0 3px 3px 0;z-index:2}
+.kb .wk.rng{background:color-mix(in srgb,var(--ok) 20%,#f7f7f4)}
+.kb .bk.rng{background:#2b4538}
+.kb .wk.dn{background:color-mix(in srgb,var(--bad) 45%,#f7f7f4)}
+.kb .bk.dn{background:var(--bad)}
 </style></head><body><main id="app"></main>
 <script>
 const $ = s => document.querySelector(s), app = $('#app');
@@ -291,14 +302,14 @@ function playerView() {
     <label><input type="radio" name="me" value="${t.key}" ${t.key === mine ? 'checked' : ''}> Me</label>
     <select data-i="${t.key}" aria-label="Instrument">${opts(t.key)}</select></div></div>`).join('')}<div class="trow" style="height:${TH}px;display:flex;align-items:center;gap:8px"><span class="lb" style="flex:none">Tempo</span><span class="mut" id="tcur" style="font-size:12px"></span></div></div>
     <div class="cvw"><canvas id="cv" style="height:${Y0 + tracks.length * LH + TH}px"></canvas></div></div></div>
-  <div class="live"><div class="big"><span id="det">–</span><span id="tgt" class="mut">–</span></div><canvas id="lv" style="height:230px"></canvas><div class="mut" id="lvl" style="font-size:12px"></div>
+  <div class="live"><div class="big"><span id="det">–</span><span id="tgt" class="mut">–</span></div><div class="lvrow"><div id="kb" class="kb" role="group" aria-label="Piano keys: click a key to hear the note"></div><canvas id="lv" style="height:230px"></canvas></div><div class="mut" id="lvl" style="font-size:12px"></div>
   <div class="meter"><div class="zone"></div><div class="mid"></div><div class="needle" id="nd"></div></div></div></div>
   <div id="res" class="card"></div>
-  <div class="mut" id="sc">Space: play/stop. Click the timeline to set the start point; stop returns to it. Wheel zooms, shift+wheel or drag pans. Headphones required. Mic on and “Me” selected = scored run. Dots show true pitch; hollow = right note, other octave.</div>`;
+  <div class="mut" id="sc">Space: play/stop. Click the timeline to set the start point; stop returns to it. Wheel zooms, shift+wheel or drag pans. Headphones required. Mic on and “Me” selected = scored run. Dots show true pitch; hollow = right note, other octave. Click the piano keys beside the live view to hear a note (e.g. your starting pitch).</div>`;
   $('#back').onclick = listView; bindPicker();
   app.querySelectorAll('[name=me]').forEach(r => r.onchange = () => {
     mine = r.value; sessionStorage.setItem('mine:' + cur.id, mine); rec = []; res = null; renderRes();
-    app.querySelectorAll('.trow').forEach(x => x.classList.toggle('me', x.dataset.k === mine)); dirty = true;
+    app.querySelectorAll('.trow').forEach(x => x.classList.toggle('me', x.dataset.k === mine)); kbSync(true); dirty = true;
   });
   app.querySelectorAll('[data-m]').forEach(b => b.onclick = () => {
     const k = b.dataset.m; muted.has(k) ? muted.delete(k) : muted.add(k);
@@ -329,7 +340,7 @@ function playerView() {
   $('#rs').onclick = () => { rec = []; res = null; hist = []; resetTrack(); renderRes(); dirty = true; };
   const W = () => $('#cv').clientWidth;
   $('#zi').onclick = () => zoomAt(W() / 2, 1.6); $('#zo').onclick = () => zoomAt(W() / 2, 1 / 1.6); $('#zf').onclick = fitView;
-  bindTl(); fitView(); renderRes(); loopId++; frame(loopId);
+  bindTl(); fitView(); buildKb(); renderRes(); loopId++; frame(loopId);
 }
 
 function setTempo(v) {
@@ -510,6 +521,45 @@ document.addEventListener('keydown', e => {
   e.preventDefault(); if (!e.repeat) toggle();
 });
 document.addEventListener('keyup', e => { if (e.code === 'Space' && $('#cv')) e.preventDefault(); });
+
+/* ---------- piano keys beside the live view ---------- */
+const KLO = 36, KHI = 84, WH = 22, BH = 13, isBlk = m => [1, 3, 6, 8, 10].includes(m % 12);
+let kbY = {}, kbOut = null;
+function buildKb() {
+  const kb = $('#kb'); if (!kb) return;
+  let nw = 0; for (let m = KLO; m <= KHI; m++) if (!isBlk(m)) nw++;
+  let html = '', wi = 0; kbY = {};
+  for (let m = KLO; m <= KHI; m++) {
+    if (!isBlk(m)) {
+      const y = (nw - 1 - wi) * WH; kbY[m] = y + WH / 2; wi++;
+      html += `<div class="wk" data-m="${m}" aria-label="${nnO(m)}" style="top:${y}px;height:${WH}px">${m % 12 === 0 ? '<span>' + nnO(m) + '</span>' : ''}</div>`;
+    } else {
+      const y = (nw - wi) * WH; kbY[m] = y;
+      html += `<div class="bk" data-m="${m}" aria-label="${nnO(m)}" style="top:${y - BH / 2}px;height:${BH}px"></div>`;
+    }
+  }
+  kb.innerHTML = `<div class="ki" style="height:${nw * WH}px">${html}</div>`;
+  kb.onclick = e => {
+    const k = e.target.closest('[data-m]'); if (!k) return;
+    keyPlay(+k.dataset.m); k.classList.add('dn'); setTimeout(() => k.classList.remove('dn'), 220);
+  };
+  kbSync(true);
+}
+function kbSync(scroll) {
+  const kb = $('#kb'); if (!kb) return;
+  const T = tracks.find(x => x.key === mine);
+  kb.querySelectorAll('[data-m]').forEach(k => k.classList.toggle('rng', !!T && +k.dataset.m >= T.lo && +k.dataset.m <= T.hi));
+  if (scroll) {
+    const c = T ? (T.lo + T.hi) / 2 : 60, m = Math.round(Math.max(KLO, Math.min(KHI, c)));
+    kb.scrollTop = Math.max(0, kbY[m] - kb.clientHeight / 2);
+  }
+}
+function keyPlay(m) {
+  ensureCtx();
+  if (!kbOut) { kbOut = ctx.createGain(); kbOut.connect(ctx.destination); }
+  kbOut.gain.value = mvol;
+  const a = ctx.currentTime + 0.01; synth('piano', m, a, a + 1.5, kbOut);
+}
 
 /* ---------- scoring + live view ---------- */
 const fold = d => ((d + 6) % 12 + 12) % 12 - 6;

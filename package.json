@@ -1,6 +1,6 @@
 {
   "name": "dechiffrage",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": true,
   "description": "Sight-reading trainer for choir singers: MIDI playback, live pitch feedback and scoring.",
   "scripts": {
