@@ -35,3 +35,7 @@ Every push to `main` publishes `ghcr.io/OWNER/REPO:latest`. Pushing a tag such a
 ```bash
 git tag v0.1.0 && git push origin v0.1.0
 ```
+
+## Version
+
+The version shown in the ⓘ bubble next to the title on the main menu comes from `package.json` (injected by `server.js`). Bump it before each deployment so you can tell which build is running.

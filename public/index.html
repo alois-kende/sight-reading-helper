@@ -65,6 +65,20 @@ select{background:var(--card);color:var(--fg);border:1px solid var(--line);borde
 canvas{display:block;width:100%;touch-action:none;cursor:pointer}
 .up{display:flex;flex-direction:column;gap:2px}
 .up button{min-height:20px;padding:0 8px;line-height:1}
+:root{--rec:#e5192b}
+@media(prefers-color-scheme:dark){:root{--rec:#ff4d5e}}
+.pickw{display:flex;align-items:center;gap:8px;flex:1 1 360px;min-width:0}
+.ib{display:inline-flex;align-items:center;justify-content:center;flex:none;width:22px;height:22px;min-height:0;padding:0;border-radius:50%;border:1.5px solid var(--mut);background:none;color:var(--mut);font:italic 700 14px/1 Georgia,serif;vertical-align:middle;cursor:pointer}
+.ib:hover,.ib[aria-expanded=true]{background:var(--acc);color:var(--on);border-color:var(--acc)}
+h1 .ib{margin-left:10px;position:relative;top:-3px}
+.tipbox{position:fixed;z-index:100;left:0;top:0;width:max-content;max-width:min(380px,calc(100vw - 16px));max-height:min(60vh,420px);overflow:auto;padding:10px 12px;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.25);font:14px/1.45 system-ui,sans-serif}
+.tipbox[hidden]{display:none}
+.tipbox div+div{margin-top:6px}
+.tipbox .info{white-space:pre-line}
+.tipbox a{color:inherit;text-decoration:underline;overflow-wrap:anywhere}
+.rdot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--rec);margin-right:7px;vertical-align:middle;animation:rp 1.6s infinite}
+@keyframes rp{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--rec) 55%,transparent)}70%,100%{box-shadow:0 0 0 7px transparent}}
+@media(prefers-reduced-motion:reduce){.rdot{animation:none}}
 </style></head><body><main id="app"></main>
 <script>
 const $ = s => document.querySelector(s), app = $('#app');
@@ -76,6 +90,60 @@ const api = async (p, o = {}) => {
   if (!r.ok) throw new Error(j.error || r.statusText);
   return j;
 };
+
+const APP_VERSION = '__APP_VERSION__';
+const APP_REPO = 'https://github.com/alois-kende/sight-reading-helper';
+
+/* ---------- info bubbles: hover shows, click locks until click elsewhere / scroll ---------- */
+const tipBtn = (html, label) => `<button type="button" class="ib" aria-label="${esc(label)}" aria-haspopup="true" aria-expanded="false">i</button><span class="tipsrc" hidden>${html}</span>`;
+const tipBox = document.createElement('div');
+tipBox.className = 'tipbox'; tipBox.setAttribute('role', 'tooltip'); tipBox.hidden = true; document.body.appendChild(tipBox);
+let tipFor = null, tipLocked = false, tipTimer = 0;
+function tipPlace(b) {
+  const r = b.getBoundingClientRect(), pad = 8, vw = document.documentElement.clientWidth, vh = innerHeight;
+  tipBox.style.left = '0px'; tipBox.style.top = '0px';
+  const w = tipBox.offsetWidth, h = tipBox.offsetHeight;
+  const x = Math.max(pad, Math.min(r.left, vw - w - pad));
+  let y = r.bottom + 6; if (y + h > vh - pad && r.top - 6 - h >= pad) y = r.top - 6 - h;
+  tipBox.style.left = x + 'px'; tipBox.style.top = y + 'px';
+}
+function tipHide() {
+  clearTimeout(tipTimer); tipBox.hidden = true;
+  if (tipFor) tipFor.setAttribute('aria-expanded', 'false');
+  tipFor = null; tipLocked = false;
+}
+function tipShow(b) {
+  clearTimeout(tipTimer);
+  const src = b.nextElementSibling; if (!src || !b.isConnected) return;
+  if (tipFor && tipFor !== b) tipFor.setAttribute('aria-expanded', 'false');
+  if (tipFor !== b) { tipBox.innerHTML = src.innerHTML; tipFor = b; }
+  tipBox.hidden = false; b.setAttribute('aria-expanded', 'true'); tipPlace(b);
+}
+const tipBtnOf = e => e.target.closest ? e.target.closest('.ib') : null;
+document.addEventListener('mouseover', e => {
+  if (tipLocked) return;
+  const b = tipBtnOf(e);
+  if (b) tipShow(b); else if (tipBox.contains(e.target)) clearTimeout(tipTimer);
+});
+document.addEventListener('mouseout', e => {
+  if (tipLocked || !(tipBtnOf(e) || tipBox.contains(e.target))) return;
+  const to = e.relatedTarget;
+  if (to && (tipBox.contains(to) || (tipFor && tipFor.contains(to)))) return;
+  clearTimeout(tipTimer); tipTimer = setTimeout(tipHide, 150);
+});
+document.addEventListener('focusin', e => { const b = tipBtnOf(e); if (b && !tipLocked) tipShow(b); });
+document.addEventListener('focusout', e => { if (!tipLocked && tipBtnOf(e)) tipHide(); });
+document.addEventListener('click', e => {
+  const b = tipBtnOf(e);
+  if (b) { e.preventDefault(); if (tipLocked && tipFor === b) tipHide(); else { tipShow(b); tipLocked = true; } return; }
+  if (!tipBox.contains(e.target)) tipHide();
+});
+document.addEventListener('scroll', e => { if (!tipBox.hidden && !tipBox.contains(e.target)) tipHide(); }, true);
+addEventListener('resize', tipHide);
+addEventListener('keydown', e => { if (e.key === 'Escape') tipHide(); });
+const micHTML = () => micOn ? '<span class="rdot" aria-hidden="true"></span>Mic: on' : 'Mic: off';
+const appTip = () => `<div>Sight-reading trainer for choir singers: load a MIDI score, mute or turn down the other parts, sing your own part into the microphone and get live pitch feedback and a score.</div><div>Source code: <a href="${APP_REPO}" target="_blank" rel="noopener">${APP_REPO.replace('https://', '')}</a></div><div class="mut">Version ${esc(APP_VERSION.startsWith('__') ? 'dev' : APP_VERSION)}</div>`;
+const pieceTip = p => (sub(p) ? `<div><b>${esc(sub(p))}</b></div>` : '') + (p.info ? `<div class="info">${esc(p.info)}</div>` : '');
 
 /* ---------- MIDI parser ---------- */
 function parseMidi(buf) {
@@ -166,7 +234,7 @@ const guessInfo = tx => tx.filter(x => !/^\s*(?:by|composer:?)\s+/i.test(x)).joi
 const sub = p => [p.composer, p.date].filter(Boolean).join(' · ');
 async function listView() {
   loopId++; stop(); app.className = 'narrow';
-  app.innerHTML = '<h1>Déchiffrage</h1><div id="l">Loading…</div>';
+  tipHide(); app.innerHTML = `<h1>Déchiffrage${tipBtn(appTip(), 'About this app')}</h1><div id="l">Loading…</div>`;
   try { pieces = await api('/pieces'); } catch (e) { $('#l').innerHTML = `<span class="err">${esc(e.message)}</span>`; return; }
   if (!pieces.length) { $('#l').innerHTML = '<p class="mut">No pieces yet. An admin can add one at <a href="#admin">#admin</a>.</p>'; return; }
   $('#l').innerHTML = '<input type="text" id="q" placeholder="Search title, composer, date, info…" autocomplete="off"><div id="rows"></div>';
@@ -199,7 +267,7 @@ function bindPicker() {
 }
 
 async function openPiece(id) {
-  cur = pieces.find(p => p.id === id); app.className = 'narrow'; app.innerHTML = '<p>Loading…</p>';
+  tipHide(); cur = pieces.find(p => p.id === id); app.className = 'narrow'; app.innerHTML = '<p>Loading…</p>';
   try { song = await loadMidi(id); } catch (e) { app.innerHTML = `<p class="err">${esc(e.message)}</p>`; return; }
   tracks = orderTracks(song, cur, false);
   try { ov = JSON.parse(localStorage.getItem('inst:' + id) || '{}'); } catch (e) { ov = {}; }
@@ -212,9 +280,8 @@ async function openPiece(id) {
 
 function playerView() {
   const opts = k => Object.entries(INST).map(([v, l]) => `<option value="${v}" ${inst[k] === v ? 'selected' : ''}>${l}</option>`).join('');
-  app.innerHTML = `<div class="bar" style="margin-top:0"><button id="back">Pieces</button><div class="pick"><input type="text" id="ps" value="${esc(cur.title)}" autocomplete="off" aria-label="Choose a piece: search by title, composer, date or info"><div id="pl" class="plist hide"></div></div></div>
-  <div class="mut" style="white-space:pre-line">${esc(sub(cur))}${cur.info ? '\n' + esc(cur.info) : ''}</div>
-  <div class="bar"><button id="play" class="p">Play</button><button id="home" aria-label="Back to start">⏮ Start</button><button id="mic">Mic: ${micOn ? 'on' : 'off'}</button><button id="rs">Reset score</button>
+  app.innerHTML = `<div class="bar" style="margin-top:0"><button id="back">Pieces</button><div class="pickw"><div class="pick"><input type="text" id="ps" value="${esc(cur.title)}" title="${esc(cur.title)}" autocomplete="off" aria-label="Choose a piece: search by title, composer, date or info"><div id="pl" class="plist hide"></div></div>${sub(cur) || cur.info ? tipBtn(pieceTip(cur), 'About this piece') : ''}</div></div>
+  <div class="bar"><button id="play" class="p">Play</button><button id="home" aria-label="Back to start">⏮ Start</button><button id="mic" aria-pressed="${micOn}">${micHTML()}</button><button id="rs">Reset score</button>
     <label class="mut"><input type="checkbox" id="ci" checked> Count-in</label>
     <label class="mut">Latency <input id="lat" type="number" min="0" max="500" step="10" value="${Math.round(lat * 1000)}" style="width:68px;min-height:36px">ms</label><span class="mut">Bar</span><button id="bp" aria-label="Previous bar">−</button><input id="bar" type="number" min="1" max="${song.measures.length}" value="1" style="width:58px;min-height:36px;text-align:center"><button id="bn" aria-label="Next bar">+</button><span class="mut" id="bpm"></span></div>
   <div class="bar"><label class="mut">Volume <input id="mv" type="range" min="0" max="150" step="5" value="${Math.round(mvol * 100)}"></label><label class="mut">Tempo <input id="tp" type="range" min="25" max="250" step="5" value="${Math.round(tempo * 100)}"> <span id="tv">${Math.round(tempo * 100)}%</span></label>
@@ -546,7 +613,7 @@ async function toggleMic() {
     await ensureCtx();
     const s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
     an = ctx.createAnalyser(); an.fftSize = 4096; ctx.createMediaStreamSource(s).connect(an);
-    micOn = true; $('#mic').textContent = 'Mic: on';
+    micOn = true; $('#mic').innerHTML = micHTML(); $('#mic').setAttribute('aria-pressed', 'true');
   } catch (e) { $('#sc').innerHTML = `<span class="err">Mic unavailable: ${esc(e.message)} (HTTPS required)</span>`; }
 }
 let lastRms = 0;

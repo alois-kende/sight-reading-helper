@@ -1,6 +1,7 @@
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
 const PORT = process.env.PORT || 3000;
 const PASS = process.env.ADMIN_PASSWORD || 'password';
+const VERSION = require('./package.json').version;
 const DATA = path.join(__dirname, 'data');
 fs.mkdirSync(DATA, { recursive: true });
 const DB = path.join(DATA, 'pieces.json');
@@ -33,8 +34,8 @@ http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x');
     const p = url.pathname;
     if (p === '/' || p === '/index.html') {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      return res.end(fs.readFileSync(path.join(__dirname, 'public', 'index.html')));
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+      return res.end(fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8').replace('__APP_VERSION__', VERSION));
     }
     if (!p.startsWith('/api/')) return send(res, 404, { error: 'not found' });
     const m = p.match(/^\/api\/pieces(?:\/([a-f0-9]+))?(\/midi)?$/);
