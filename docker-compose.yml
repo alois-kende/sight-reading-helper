@@ -1,0 +1,16 @@
+# On the server: put this file in a folder, set the image name below, then
+#   docker compose pull && docker compose up -d
+services:
+  dechiffrage:
+    image: ghcr.io/OWNER/REPO:latest   # replace OWNER/REPO with your GitHub path, in lowercase
+    container_name: dechiffrage
+    restart: unless-stopped
+    ports:
+      - "3000:3000"                    # use "127.0.0.1:3000:3000" if only cloudflared on this host needs to reach it
+    environment:
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-password}   # set a real one in a .env file next to this file
+    volumes:
+      - dechiffrage-data:/app/data
+
+volumes:
+  dechiffrage-data:

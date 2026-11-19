@@ -1,0 +1,12 @@
+{
+  "name": "dechiffrage",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Sight-reading trainer for choir singers: MIDI playback, live pitch feedback and scoring.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
