@@ -217,7 +217,7 @@ const INST = { sine: 'Sine', piano: 'Piano', organ: 'Organ', choir: 'Choir', str
 const guess = n => /string|violin|synth|d'bass/i.test(n) ? 'strings' : 'piano';
 let pieces = [], cur = null, song = null, tracks = [], mine = null, muted = new Set(), solo = new Set(), inst = {}, ov = {}, vol = {};
 let tempo = 1, ctx, master, lfoG, gains = {}, playing = false, startPos = 0, anchorCtx = 0, anchorPos = 0, sched = [], timer = null;
-let rec = [], res = null, lat = 0.12, mvol = 1, an, micOn = false, hist = [], okN = 0, totN = 0, loopId = 0, view = { t0: 0, pps: 50 }, dirty = true;
+let rec = [], res = null, barStore = {}, lat = 0.12, mvol = 1, an, micOn = false, hist = [], okN = 0, totN = 0, loopId = 0, view = { t0: 0, pps: 50 }, dirty = true;
 const LH = 60, RH = 26, TH = 34, Y0 = RH;
 try { const sv = localStorage.getItem("lat"); if (sv !== null) lat = +sv; const mv = localStorage.getItem("mvol"); if (mv !== null) mvol = +mv; } catch (e) { }
 
@@ -287,7 +287,7 @@ async function openPiece(id) {
   try { vol = JSON.parse(localStorage.getItem('vol:' + id) || '{}'); } catch (e) { vol = {}; }
   tracks.forEach(t => { if (typeof vol[t.key] !== 'number') vol[t.key] = 1; });
   mine = sessionStorage.getItem('mine:' + id); if (!tracks.some(t => t.key === mine)) mine = null;
-  muted = new Set(); solo = new Set(); startPos = 0; rec = []; res = null; app.className = ''; playerView();
+  muted = new Set(); solo = new Set(); startPos = 0; rec = []; res = null; barStore = {}; app.className = ''; playerView();
 }
 
 function playerView() {
@@ -309,7 +309,7 @@ function playerView() {
   <div class="mut" id="sc">Space: play/stop. Click the timeline to set the start point; stop returns to it. Wheel zooms, shift+wheel or drag pans. Headphones required. Mic on and “Me” selected = scored run. Dots show true pitch; hollow = right note, other octave. Click a key beside the live view to hear that note (e.g. your starting pitch); NEXT marks the next note to sing.</div>`;
   $('#back').onclick = listView; bindPicker();
   app.querySelectorAll('[name=me]').forEach(r => r.onchange = () => {
-    mine = r.value; sessionStorage.setItem('mine:' + cur.id, mine); rec = []; res = null; renderRes();
+    mine = r.value; sessionStorage.setItem('mine:' + cur.id, mine); rec = []; res = null; barStore = {}; renderRes();
     app.querySelectorAll('.trow').forEach(x => x.classList.toggle('me', x.dataset.k === mine)); dirty = true;
   });
   app.querySelectorAll('[data-m]').forEach(b => b.onclick = () => {
@@ -340,7 +340,7 @@ function playerView() {
   const step = d => { const pp = playing ? Math.max(posNow(), anchorPos) : startPos, t = song.measures[Math.max(0, Math.min(barIdx(pp) + d, song.measures.length - 1))].t; seek(t); reveal(t); };
   $('#bp').onclick = () => step(-1); $('#bn').onclick = () => step(1);
   $('#home').onclick = () => { seek(0); reveal(0); };
-  $('#rs').onclick = () => { rec = []; res = null; hist = []; resetTrack(); renderRes(); dirty = true; };
+  $('#rs').onclick = () => { rec = []; res = null; barStore = {}; hist = []; resetTrack(); renderRes(); dirty = true; };
   const W = () => $('#cv').clientWidth;
   $('#zi').onclick = () => zoomAt(W() / 2, 1.6); $('#zo').onclick = () => zoomAt(W() / 2, 1 / 1.6); $('#zf').onclick = fitView;
   bindTl(); fitView(); bindKb(); refreshMix(); renderRes(); loopId++; frame(loopId);
@@ -453,6 +453,7 @@ function ensureCtx() {
 }
 async function play() { await ensureCtx(); startPlay(startPos, $('#ci').checked); }
 function startPlay(pos, ci, keep) {
+  if (playing && !keep) finishRun();
   killVoices(); fx = {}; if (master) { master.disconnect(); }
   master = ctx.createGain(); master.gain.value = mvol; master.connect(ctx.destination);
   const t0 = ctx.currentTime + 0.08; let lead = 0;
@@ -465,7 +466,7 @@ function startPlay(pos, ci, keep) {
     }
     lead = nb * beat;
   }
-  anchorCtx = t0 + lead; anchorPos = pos; playing = true; gains = {}; if (!keep) { rec = []; res = null; renderRes(); resetTrack(); }
+  anchorCtx = t0 + lead; anchorPos = pos; playing = true; gains = {}; if (!keep) { rec = []; resetTrack(); }
   tracks.forEach(t => { const g = ctx.createGain(); g.gain.value = audible(t.key) ? vol[t.key] : 0; g.connect(master); gains[t.key] = g; });
   sched = tracks.map(t => { const i = t.notes.findIndex(n => n.t >= pos); return { i: i < 0 ? t.notes.length : i }; });
   tracks.forEach(t => { for (const n of t.notes) { if (n.t >= pos) break; if (n.t + n.d > pos + 0.03) voice(t, n, pos); } });
@@ -598,15 +599,21 @@ function scoreRun() {
     }
     out.push({ n, w: Math.max(.15, Math.min(n.d, 2)), pitch, tim, onset, cents, cov, score: tim === null ? pitch : .7 * pitch + .3 * tim, bar: barIdx(n.t) });
   });
-  const W = out.reduce((s, o) => s + o.w, 0), by = {};
+  const tot = {}; T.notes.forEach(n => { if (n.d >= .1) { const b = barIdx(n.t); tot[b] = (tot[b] || 0) + 1; } });
+  const by = {};
   out.forEach(o => { const b = by[o.bar] = by[o.bar] || { i: o.bar, w: 0, s: 0, ns: [] }; b.w += o.w; b.s += o.score * o.w; b.ns.push(o); });
-  const bars = Object.values(by).map(b => ({ ...b, score: b.s / b.w, loss: (b.w - b.s) / W * 100 })), byBar = {};
-  bars.forEach(b => byBar[b.i] = b.score);
-  const tm = out.filter(o => o.tim !== null), tw = tm.reduce((s, o) => s + o.w, 0);
+  return Object.values(by).map(b => ({ ...b, full: b.ns.length >= (tot[b.i] || 0) }));
+}
+// Scores persist per bar across runs: a bar is replaced only when it is sung again (a partly covered bar never overwrites a complete one).
+function summarize() {
+  const bars = Object.values(barStore); if (!bars.length) return null;
+  const W = bars.reduce((s, b) => s + b.w, 0), all = bars.flatMap(b => b.ns), byBar = {};
+  bars.forEach(b => { b.score = b.s / b.w; b.loss = (b.w - b.s) / W * 100; byBar[b.i] = b.score; });
+  const tm = all.filter(o => o.tim !== null), tw = tm.reduce((s, o) => s + o.w, 0), idx = bars.map(b => b.i);
   return {
-    score: Math.max(0, 100 - bars.reduce((s, b) => s + b.loss, 0)), count: out.length, missed: out.filter(o => o.cov < .4).length,
-    pitch: out.reduce((s, o) => s + o.pitch * o.w, 0) / W, timing: tw ? tm.reduce((s, o) => s + o.tim * o.w, 0) / tw : 1,
-    bars, byBar, b0: out[0].bar, b1: out[out.length - 1].bar
+    score: Math.max(0, 100 - bars.reduce((s, b) => s + b.loss, 0)), count: all.length, missed: all.filter(o => o.cov < .4).length,
+    pitch: all.reduce((s, o) => s + o.pitch * o.w, 0) / W, timing: tw ? tm.reduce((s, o) => s + o.tim * o.w, 0) / tw : 1,
+    bars, byBar, b0: Math.min(...idx), b1: Math.max(...idx), n: bars.length
   };
 }
 function why(b) {
@@ -619,14 +626,19 @@ function why(b) {
   return p.join(', ') || 'small deviations';
 }
 function finishRun() {
-  if (mine && micOn && rec.length) { res = scoreRun(); renderRes(res ? '' : 'Not enough singing detected to score this run.'); }
+  if (mine && micOn && rec.length) {
+    const rb = scoreRun();
+    if (rb) { rb.forEach(b => { const o = barStore[b.i]; if (b.full || !o || !o.full) barStore[b.i] = b; }); res = summarize(); renderRes(); }
+    else renderRes(res ? 'Not enough singing detected to score the last run.' : 'Not enough singing detected to score this run.');
+  }
   dirty = true;
 }
 function renderRes(msg) {
   const el = $('#res'); if (!el) return;
   if (!res) { el.innerHTML = msg ? `<span class="mut">${esc(msg)}</span>` : ''; return; }
+  const rng = res.n === res.b1 - res.b0 + 1 ? 'bars ' + song.measures[res.b0].n + '–' + song.measures[res.b1].n : res.n + ' bars scored (' + song.measures[res.b0].n + '–' + song.measures[res.b1].n + ')';
   const m = song.measures, top = res.bars.filter(b => b.loss >= .3).sort((a, b) => b.loss - a.loss).slice(0, 8);
-  el.innerHTML = `<div class="score"><span class="num">${Math.round(res.score)}</span><span class="mut"> / 100 · ${res.count} notes · bars ${m[res.b0].n}–${m[res.b1].n}</span></div>
+  el.innerHTML = `<div class="score"><span class="num">${Math.round(res.score)}</span><span class="mut"> / 100 · ${res.count} notes · ${rng}</span></div>${msg ? `<div class="mut">${esc(msg)}</div>` : ''}
   <div class="mut">Pitch ${Math.round(res.pitch * 100)} · Timing ${Math.round(res.timing * 100)} · ${res.missed} not sung</div>
   ${top.length ? top.map(b => `<button class="ls" data-b="${b.i}"><b>Bar ${m[b.i].n}</b><span>−${b.loss.toFixed(1)}</span><span class="mut">${esc(why(b))}</span></button>`).join('') : '<p>No bar lost more than 0.3 points.</p>'}`;
   el.querySelectorAll('[data-b]').forEach(b => b.onclick = () => { const x = song.measures[+b.dataset.b]; seek(x.t); reveal(x.t); });
