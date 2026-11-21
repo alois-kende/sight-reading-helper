@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Déchiffrage</title>
+<title>Sight Reading Helper</title>
 <style>
 :root{--bg:#eef1f5;--fg:#14213d;--mut:#5d6b82;--card:#fff;--line:#cdd5e1;--acc:#14213d;--on:#fff;--ok:#1c9c5b;--bad:#e4572e;--zone:rgba(28,156,91,.14)}
 @media(prefers-color-scheme:dark){:root{--bg:#0e1522;--fg:#e8edf6;--mut:#8b9ab3;--card:#162032;--line:#2a3750;--acc:#e8edf6;--on:#0e1522;--ok:#3fcf7a;--bad:#ff7a52;--zone:rgba(63,207,122,.14)}}
@@ -84,11 +84,102 @@ h1 .ib{margin-left:10px;position:relative;top:-3px}
 .lvrow #lv{flex:1 1 0;min-width:0;width:auto;border-radius:0 8px 8px 0}
 #kb{flex:0 0 58px;width:58px;border:1px solid var(--line);border-right:0;border-radius:8px 0 0 8px;touch-action:none}
 .bar .pick input[type=text]{width:100%;text-overflow:ellipsis}
+.hc,.hb{fill:var(--card);stroke:var(--line)}
+.ht{font:12px system-ui,sans-serif;fill:var(--fg)}.ht.s{font-size:11px}.ht.m{fill:var(--mut)}
+.hl{fill:none;stroke:#ffb703;stroke-width:2.5}
+.ov{position:fixed;inset:0;z-index:200;display:flex;padding:max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom));overflow:auto;background:rgba(10,16,28,.55)}
+.hp{position:relative;margin:auto;width:100%;max-width:660px;padding:20px 20px 4px;background:var(--bg);border:1px solid var(--line);border-radius:12px}
+.hp h2{margin-bottom:16px;padding-right:36px}
+.hp .x{position:absolute;top:12px;right:12px;width:32px;min-height:32px;padding:0;border-radius:50%;font-size:18px;line-height:1}
+.hs{list-style:none;margin:0;padding:0;counter-reset:s}
+.hs li{display:grid;grid-template-columns:minmax(0,260px) 1fr;gap:20px;align-items:center;padding:0 0 16px;margin-bottom:16px;border-bottom:1px solid var(--line);counter-increment:s}
+.hs li:last-child{border-bottom:0;margin-bottom:0}
+.hs svg{display:block;width:100%;height:auto}
+.hs b{display:block;margin-bottom:2px;font-family:Georgia,serif;font-size:17px}
+.hs b::before{content:counter(s) '. ';color:var(--mut)}
+.hs span{display:block;color:var(--mut);font-size:14px}
+@media(max-width:560px){.hs li{grid-template-columns:1fr;gap:10px}}
 </style></head><body><main id="app"></main>
 <script>
 const $ = s => document.querySelector(s), app = $('#app');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 let admin = sessionStorage.getItem('adm') || '';
+/* ---------- language (instance-wide, set by the admin and stored by the server) ---------- */
+const LANG0 = '__APP_LANG__';
+let lang = LANG0 === 'fr' ? 'fr' : 'en';
+const L = {
+  en: {
+    app: 'Sight Reading Helper', loading: 'Loading…',
+    noPieces: 'No pieces yet. An admin can add one at <a href="#admin">#admin</a>.',
+    search: 'Search title, composer, date, info…', open: 'Open', noMatch: 'No match.',
+    pickAria: 'Choose a piece: search by title, composer, date or info',
+    pieces: 'Pieces', aboutApp: 'About this app', aboutPiece: 'About this piece',
+    notFound: 'Piece not found.', backList: 'Back to the list',
+    play: 'Play', stop: 'Stop', start: '⏮ Start', toStart: 'Back to start',
+    micOn: 'Mic: on', micOff: 'Mic: off', reset: 'Reset results', countIn: 'Count-in', latency: 'Latency',
+    bar: 'Bar', prevBar: 'Previous bar', nextBar: 'Next bar', volume: 'Volume', tempo: 'Tempo',
+    zoomOut: 'Zoom out', zoomIn: 'Zoom in', fit: 'Fit', mute: 'Mute', solo: 'Solo', me: 'Me', instrument: 'Instrument',
+    i_sine: 'Sine', i_piano: 'Piano', i_organ: 'Organ', i_choir: 'Choir', i_strings: 'Strings', i_flute: 'Flute',
+    keys: 'Note keys: click to hear a note', next: 'NEXT',
+    hint: 'Space: play/stop. Click the timeline to set the start point; stop returns to it. Wheel zooms, shift+wheel or drag pans. Headphones required. Mic on and “Me” selected = analysed run: the bars to work on are listed below and coloured on the timeline. Dots show true pitch; hollow = right note, other octave. Click a key beside the live view to hear that note (e.g. your starting pitch); NEXT marks the next note to sing.',
+    pickMe: 'Select “Me” on a track to see the line to match.',
+    micErr: 'Mic unavailable: {e} (HTTPS required)', target: 'target', micLevel: 'Mic level', noPitch: 'no pitch',
+    notSung: '{n} not sung', flat: 'flat {c}¢ on {n}', sharp: 'sharp {c}¢ on {n}', late: 'late {c} ms on {n}', early: 'early {c} ms on {n}', small: 'small deviations',
+    noRunLast: 'Not enough singing detected to analyse the last run.', noRun: 'Not enough singing detected to analyse this run.',
+    workOn: 'Bars to work on, worst first:', more: '+ {n} more', allGood: 'Nothing left to work on in the bars sung so far.',
+    tipLic: 'Open source, released under the MIT licence.', version: 'Version',
+    help: 'Help', close: 'Close', or: 'or', space: 'Space',
+    hTitle: 'How it works',
+    h1t: 'Pick your part', h1d: 'Tick “Me” on the track you are going to sing.',
+    h2t: 'Turn on the mic', h2d: 'Click Mic and allow access. Wear headphones so the mic doesn’t pick up the music.',
+    h3t: 'Press Play', h3d: 'Or hit Space. A count-in gives you the tempo.',
+    h4t: 'Watch the live view', h4d: 'Each dot is your voice. Green and level with the bar: in tune. Above or below it: too sharp or too flat. Starting after the bar: late.',
+    admin: 'Admin', password: 'Password', signIn: 'Sign in', wrongPw: 'Wrong password', edit: 'Edit', del: 'Delete', confirmDel: 'Delete this piece?',
+    editPiece: 'Edit piece', newPiece: 'New piece', title: 'Title', composer: 'Composer', date: 'Date',
+    otherPh: 'Other info: arranger, key, language, notes…', otherAria: 'Other info', up: 'Move up', down: 'Move down',
+    label: 'Label', defInst: 'Default instrument', hide: 'Hide', save: 'Save', cancel: 'Cancel', notesN: '{n} notes',
+    langLabel: 'Language', langNote: 'Applies to everyone using this server.'
+  },
+  fr: {
+    app: 'Sight Reading Helper', loading: 'Chargement…',
+    noPieces: 'Aucun morceau pour l’instant. Un administrateur peut en ajouter sur <a href="#admin">#admin</a>.',
+    search: 'Rechercher un titre, un compositeur, une date…', open: 'Ouvrir', noMatch: 'Aucun résultat.',
+    pickAria: 'Choisir un morceau\u00a0: recherche par titre, compositeur, date ou infos',
+    pieces: 'Morceaux', aboutApp: 'À propos de l’application', aboutPiece: 'À propos de ce morceau',
+    notFound: 'Morceau introuvable.', backList: 'Retour à la liste',
+    play: 'Lecture', stop: 'Stop', start: '⏮ Début', toStart: 'Retour au début',
+    micOn: 'Micro\u00a0: on', micOff: 'Micro\u00a0: off', reset: 'Réinitialiser les résultats', countIn: 'Décompte', latency: 'Latence',
+    bar: 'Mesure', prevBar: 'Mesure précédente', nextBar: 'Mesure suivante', volume: 'Volume', tempo: 'Tempo',
+    zoomOut: 'Zoom arrière', zoomIn: 'Zoom avant', fit: 'Ajuster', mute: 'Muet', solo: 'Solo', me: 'Moi', instrument: 'Instrument',
+    i_sine: 'Sinus', i_piano: 'Piano', i_organ: 'Orgue', i_choir: 'Chœur', i_strings: 'Cordes', i_flute: 'Flûte',
+    keys: 'Touches\u00a0: cliquez pour entendre une note', next: 'SUIVANT',
+    hint: 'Espace\u00a0: lecture/arrêt. Cliquez sur la frise pour choisir le point de départ\u00a0; l’arrêt y revient. La molette zoome, Maj+molette ou glisser déplace. Casque obligatoire. Micro activé et «\u00a0Moi\u00a0» coché = passe analysée\u00a0: les mesures à travailler sont listées plus bas et colorées sur la frise. Les points montrent la hauteur réelle\u00a0; creux = bonne note, autre octave. Cliquez sur une touche à côté de la vue en direct pour entendre cette note (par exemple votre note de départ)\u00a0; SUIVANT marque la prochaine note à chanter.',
+    pickMe: 'Cochez «\u00a0Moi\u00a0» sur une piste pour voir la ligne à reproduire.',
+    micErr: 'Micro indisponible\u00a0: {e} (HTTPS requis)', target: 'cible', micLevel: 'Niveau micro', noPitch: 'pas de hauteur',
+    notSung: '{n} non chantées', flat: 'trop bas de {c}¢ sur {n}', sharp: 'trop haut de {c}¢ sur {n}', late: 'en retard de {c} ms sur {n}', early: 'en avance de {c} ms sur {n}', small: 'petits écarts',
+    noRunLast: 'Pas assez de chant détecté pour analyser la dernière passe.', noRun: 'Pas assez de chant détecté pour analyser cette passe.',
+    workOn: 'Mesures à travailler, les plus faibles d’abord\u00a0:', more: '+ {n} de plus', allGood: 'Plus rien à retravailler dans les mesures chantées jusqu’ici.',
+    tipLic: 'Open source, publié sous licence MIT.', version: 'Version',
+    help: 'Aide', close: 'Fermer', or: 'ou', space: 'Espace',
+    hTitle: 'Comment ça marche',
+    h1t: 'Choisissez votre partie', h1d: 'Cochez «\u00a0Moi\u00a0» sur la piste que vous allez chanter.',
+    h2t: 'Activez le micro', h2d: 'Cliquez sur Micro et autorisez l’accès. Portez un casque pour que le micro ne capte pas la musique.',
+    h3t: 'Lancez la lecture', h3d: 'Ou appuyez sur Espace. Un décompte donne le tempo.',
+    h4t: 'Suivez la vue en direct', h4d: 'Chaque point est votre voix. Vert et au niveau de la barre\u00a0: juste. Au-dessus ou en dessous\u00a0: trop haut ou trop bas. Qui démarre après la barre\u00a0: en retard.',
+    admin: 'Administration', password: 'Mot de passe', signIn: 'Se connecter', wrongPw: 'Mot de passe incorrect', edit: 'Modifier', del: 'Supprimer', confirmDel: 'Supprimer ce morceau\u00a0?',
+    editPiece: 'Modifier le morceau', newPiece: 'Nouveau morceau', title: 'Titre', composer: 'Compositeur', date: 'Date',
+    otherPh: 'Autres infos\u00a0: arrangeur, tonalité, langue, notes…', otherAria: 'Autres infos', up: 'Monter', down: 'Descendre',
+    label: 'Nom', defInst: 'Instrument par défaut', hide: 'Masquer', save: 'Enregistrer', cancel: 'Annuler', notesN: '{n} notes',
+    langLabel: 'Langue', langNote: 'S’applique à tous les utilisateurs de ce serveur.'
+  }
+};
+const tt = (k, v) => {
+  let s = (L[lang] && L[lang][k]) || L.en[k] || k;
+  if (v) for (const x in v) s = s.split('{' + x + '}').join(v[x]);
+  return s;
+};
+document.documentElement.lang = lang;
+
 const api = async (p, o = {}) => {
   const r = await fetch('/api' + p, { ...o, headers: { 'Content-Type': 'application/json', 'X-Admin': admin } });
   const j = await r.json().catch(() => ({}));
@@ -147,8 +238,8 @@ document.addEventListener('click', e => {
 document.addEventListener('scroll', e => { if (!tipBox.hidden && !tipBox.contains(e.target)) tipHide(); }, true);
 addEventListener('resize', tipHide);
 addEventListener('keydown', e => { if (e.key === 'Escape') tipHide(); });
-const micHTML = () => micOn ? '<span class="rdot" aria-hidden="true"></span>Mic: on' : 'Mic: off';
-const appTip = () => `<div>Sight-reading trainer for choir singers: load a MIDI score, mute or turn down the other parts, sing your own part into the microphone and get live pitch feedback and a list of the bars to work on.</div><div>Source code: <a href="${APP_REPO}" target="_blank" rel="noopener">${APP_REPO.replace('https://', '')}</a></div><div class="mut">Version ${esc(APP_VERSION.startsWith('__') ? 'dev' : APP_VERSION)}</div>`;
+const micHTML = () => micOn ? '<span class="rdot" aria-hidden="true"></span>' + esc(tt('micOn')) : esc(tt('micOff'));
+const appTip = () => `<div>${esc(tt('tipLic'))}</div><div><a href="${APP_REPO}" target="_blank" rel="noopener">${APP_REPO.replace('https://', '')}</a></div><div class="mut">${esc(tt('version'))} ${esc(APP_VERSION.startsWith('__') ? 'dev' : APP_VERSION)}</div>`;
 const pieceTip = p => (sub(p) ? `<div><b>${esc(sub(p))}</b></div>` : '') + (p.info ? `<div class="info">${esc(p.info)}</div>` : '');
 
 /* ---------- MIDI parser ---------- */
@@ -246,13 +337,13 @@ const guessInfo = tx => tx.filter(x => !/^\s*(?:by|composer:?)\s+/i.test(x)).joi
 const sub = p => [p.composer, p.date].filter(Boolean).join(' · ');
 async function listView() {
   loopId++; stop(); app.className = 'narrow'; document.title = TITLE0;
-  tipHide(); app.innerHTML = `<h1>Déchiffrage${tipBtn(appTip(), 'About this app')}</h1><div id="l">Loading…</div>`;
+  tipHide(); app.innerHTML = `<h1>${esc(tt('app'))}${tipBtn(appTip(), tt('aboutApp'))}</h1><div id="l">${tt('loading')}</div>`;
   try { pieces = await api('/pieces'); } catch (e) { $('#l').innerHTML = `<span class="err">${esc(e.message)}</span>`; return; }
-  if (!pieces.length) { $('#l').innerHTML = '<p class="mut">No pieces yet. An admin can add one at <a href="#admin">#admin</a>.</p>'; return; }
-  $('#l').innerHTML = '<input type="text" id="q" placeholder="Search title, composer, date, info…" autocomplete="off"><div id="rows"></div>';
+  if (!pieces.length) { $('#l').innerHTML = `<p class="mut">${tt('noPieces')}</p>`; return; }
+  $('#l').innerHTML = `<input type="text" id="q" placeholder="${esc(tt('search'))}" autocomplete="off"><div id="rows"></div>`;
   const show = () => {
     const r = pieces.filter(p => matches(p, $('#q').value));
-    $('#rows').innerHTML = r.length ? r.map(p => `<div class="row"><span class="lb">${esc(p.title)}<div class="mut">${esc(sub(p))}</div></span><button data-id="${p.id}" class="p">Open</button></div>`).join('') : '<p class="mut">No match.</p>';
+    $('#rows').innerHTML = r.length ? r.map(p => `<div class="row"><span class="lb">${esc(p.title)}<div class="mut">${esc(sub(p))}</div></span><button data-id="${p.id}" class="p">${tt('open')}</button></div>`).join('') : `<p class="mut">${tt('noMatch')}</p>`;
     app.querySelectorAll('[data-id]').forEach(b => b.onclick = () => { location.hash = '#piece/' + b.dataset.id; });
   };
   $('#q').oninput = show; show();
@@ -262,7 +353,7 @@ function bindPicker() {
   const choose = id => { box.classList.add('hide'); inp.blur(); if (id && id !== cur.id) { stop(); location.hash = '#piece/' + id; } };
   const draw = () => {
     list = pieces.filter(p => !typed || matches(p, inp.value)); act = Math.min(act, Math.max(0, list.length - 1));
-    box.innerHTML = list.length ? list.map((p, i) => `<button data-id="${p.id}" class="${i === act ? 'act' : ''}"><b>${esc(p.title)}</b><div class="mut">${esc(sub(p))}</div></button>`).join('') : '<div class="mut" style="padding:10px">No match</div>';
+    box.innerHTML = list.length ? list.map((p, i) => `<button data-id="${p.id}" class="${i === act ? 'act' : ''}"><b>${esc(p.title)}</b><div class="mut">${esc(sub(p))}</div></button>`).join('') : `<div class="mut" style="padding:10px">${tt('noMatch')}</div>`;
     box.classList.remove('hide');
     box.querySelectorAll('button').forEach(b => b.onpointerdown = e => { e.preventDefault(); choose(b.dataset.id); });
     const a = box.querySelector('.act'); if (a) a.scrollIntoView({ block: 'nearest' });
@@ -279,14 +370,14 @@ function bindPicker() {
 }
 
 async function openPiece(id) {
-  tipHide(); app.className = 'narrow'; app.innerHTML = '<p>Loading…</p>';
+  tipHide(); app.className = 'narrow'; app.innerHTML = `<p>${tt('loading')}</p>`;
   try {
     if (!pieces.some(p => p.id === id)) pieces = await api('/pieces');
     cur = pieces.find(p => p.id === id);
-    if (!cur) { app.innerHTML = '<p class="err">Piece not found.</p><p><a href="#">Back to the list</a></p>'; return; }
+    if (!cur) { app.innerHTML = `<p class="err">${tt('notFound')}</p><p><a href="#">${tt('backList')}</a></p>`; return; }
     document.title = cur.title + ' – ' + TITLE0;
     song = await loadMidi(id);
-  } catch (e) { app.innerHTML = `<p class="err">${esc(e.message)}</p><p><a href="#">Back to the list</a></p>`; return; }
+  } catch (e) { app.innerHTML = `<p class="err">${esc(e.message)}</p><p><a href="#">${tt('backList')}</a></p>`; return; }
   if (location.hash !== '#piece/' + id) return;
   tracks = orderTracks(song, cur, false);
   try { ov = JSON.parse(localStorage.getItem('inst:' + id) || '{}'); } catch (e) { ov = {}; }
@@ -298,23 +389,23 @@ async function openPiece(id) {
 }
 
 function playerView() {
-  const opts = k => Object.entries(INST).map(([v, l]) => `<option value="${v}" ${inst[k] === v ? 'selected' : ''}>${l}</option>`).join('');
-  app.innerHTML = `<div class="bar" style="margin-top:0"><button id="back">Pieces</button><div class="pickw"><div class="pick"><input type="text" id="ps" value="${esc(cur.title)}" title="${esc(cur.title)}" autocomplete="off" aria-label="Choose a piece: search by title, composer, date or info"><div id="pl" class="plist hide"></div></div>${sub(cur) || cur.info ? tipBtn(pieceTip(cur), 'About this piece') : ''}</div></div>
-  <div class="bar"><button id="play" class="p">Play</button><button id="home" aria-label="Back to start">⏮ Start</button><button id="mic" aria-pressed="${micOn}">${micHTML()}</button><button id="rs">Reset results</button>
-    <label class="mut"><input type="checkbox" id="ci" checked> Count-in</label>
-    <label class="mut">Latency <input id="lat" type="number" min="0" max="500" step="10" value="${Math.round(lat * 1000)}" style="width:68px;min-height:36px">ms</label><span class="mut">Bar</span><button id="bp" aria-label="Previous bar">−</button><input id="bar" type="number" min="1" max="${song.measures.length}" value="1" style="width:58px;min-height:36px;text-align:center"><button id="bn" aria-label="Next bar">+</button><span class="mut" id="bpm"></span></div>
-  <div class="bar"><label class="mut">Volume <input id="mv" type="range" min="0" max="150" step="5" value="${Math.round(mvol * 100)}"></label><label class="mut">Tempo <input id="tp" type="range" min="25" max="250" step="5" value="${Math.round(tempo * 100)}"> <span id="tv">${Math.round(tempo * 100)}%</span></label>
-    <button id="t100">100%</button><button id="zo" aria-label="Zoom out">−</button><button id="zi" aria-label="Zoom in">+</button><button id="zf">Fit</button></div>
+  const opts = k => Object.keys(INST).map(v => `<option value="${v}" ${inst[k] === v ? 'selected' : ''}>${tt('i_' + v)}</option>`).join('');
+  app.innerHTML = `<div class="bar" style="margin-top:0"><button id="back">${tt('pieces')}</button><div class="pickw"><div class="pick"><input type="text" id="ps" value="${esc(cur.title)}" title="${esc(cur.title)}" autocomplete="off" aria-label="${esc(tt('pickAria'))}"><div id="pl" class="plist hide"></div></div>${sub(cur) || cur.info ? tipBtn(pieceTip(cur), tt('aboutPiece')) : ''}</div><button id="helpb">${tt('help')}</button></div>
+  <div class="bar"><button id="play" class="p">${tt('play')}</button><button id="home" aria-label="${esc(tt('toStart'))}">${tt('start')}</button><button id="mic" aria-pressed="${micOn}">${micHTML()}</button><button id="rs">${tt('reset')}</button>
+    <label class="mut"><input type="checkbox" id="ci" checked> ${tt('countIn')}</label>
+    <label class="mut">${tt('latency')} <input id="lat" type="number" min="0" max="500" step="10" value="${Math.round(lat * 1000)}" style="width:68px;min-height:36px">ms</label><span class="mut">${tt('bar')}</span><button id="bp" aria-label="${esc(tt('prevBar'))}">−</button><input id="bar" type="number" min="1" max="${song.measures.length}" value="1" style="width:58px;min-height:36px;text-align:center"><button id="bn" aria-label="${esc(tt('nextBar'))}">+</button><span class="mut" id="bpm"></span></div>
+  <div class="bar"><label class="mut">${tt('volume')} <input id="mv" type="range" min="0" max="150" step="5" value="${Math.round(mvol * 100)}"></label><label class="mut">${tt('tempo')} <input id="tp" type="range" min="25" max="250" step="5" value="${Math.round(tempo * 100)}"> <span id="tv">${Math.round(tempo * 100)}%</span></label>
+    <button id="t100">100%</button><button id="zo" aria-label="${esc(tt('zoomOut'))}">−</button><button id="zi" aria-label="${esc(tt('zoomIn'))}">+</button><button id="zf">${tt('fit')}</button></div>
   <div class="split"><div class="tlwrap"><div class="tl"><div class="gut"><div class="sp" style="height:${RH}px"></div>${tracks.map(t => `<div class="trow ${t.key === mine ? 'me' : ''}" data-k="${t.key}" style="height:${LH}px">
-    <div class="top"><span class="lb">${esc(t.label)}</span><input type="range" class="vol" data-v="${t.key}" min="0" max="150" step="5" value="${Math.round(vol[t.key] * 100)}" aria-label="Volume"></div><div class="ctl"><button data-m="${t.key}" aria-label="Mute">M</button><button data-s="${t.key}" aria-label="Solo" aria-pressed="false">S</button>
-    <label><input type="radio" name="me" value="${t.key}" ${t.key === mine ? 'checked' : ''}> Me</label>
-    <select data-i="${t.key}" aria-label="Instrument">${opts(t.key)}</select></div></div>`).join('')}<div class="trow" style="height:${TH}px;display:flex;align-items:center;gap:8px"><span class="lb" style="flex:none">Tempo</span><span class="mut" id="tcur" style="font-size:12px"></span></div></div>
+    <div class="top"><span class="lb">${esc(t.label)}</span><input type="range" class="vol" data-v="${t.key}" min="0" max="150" step="5" value="${Math.round(vol[t.key] * 100)}" aria-label="${esc(tt('volume'))}"></div><div class="ctl"><button data-m="${t.key}" aria-label="${esc(tt('mute'))}">M</button><button data-s="${t.key}" aria-label="${esc(tt('solo'))}" aria-pressed="false">S</button>
+    <label><input type="radio" name="me" value="${t.key}" ${t.key === mine ? 'checked' : ''}> ${tt('me')}</label>
+    <select data-i="${t.key}" aria-label="${esc(tt('instrument'))}">${opts(t.key)}</select></div></div>`).join('')}<div class="trow" style="height:${TH}px;display:flex;align-items:center;gap:8px"><span class="lb" style="flex:none">${tt('tempo')}</span><span class="mut" id="tcur" style="font-size:12px"></span></div></div>
     <div class="cvw"><canvas id="cv" style="height:${Y0 + tracks.length * LH + TH}px"></canvas></div></div></div>
-  <div class="live"><div class="big"><span id="det">–</span><span id="tgt" class="mut">–</span></div><div class="lvrow"><canvas id="kb" style="height:230px" aria-label="Note keys: click to hear a note"></canvas><canvas id="lv" style="height:230px"></canvas></div><div class="mut" id="lvl" style="font-size:12px"></div>
+  <div class="live"><div class="big"><span id="det">–</span><span id="tgt" class="mut">–</span></div><div class="lvrow"><canvas id="kb" style="height:230px" aria-label="${esc(tt('keys'))}"></canvas><canvas id="lv" style="height:230px"></canvas></div><div class="mut" id="lvl" style="font-size:12px"></div>
   <div class="meter"><div class="zone"></div><div class="mid"></div><div class="needle" id="nd"></div></div></div></div>
   <div id="res" class="card"></div>
-  <div class="mut" id="sc">Space: play/stop. Click the timeline to set the start point; stop returns to it. Wheel zooms, shift+wheel or drag pans. Headphones required. Mic on and “Me” selected = analysed run: the bars to work on are listed below and coloured on the timeline. Dots show true pitch; hollow = right note, other octave. Click a key beside the live view to hear that note (e.g. your starting pitch); NEXT marks the next note to sing.</div>`;
-  $('#back').onclick = () => { location.hash = ''; }; bindPicker();
+  <div class="mut" id="sc">${tt('hint')}</div>`;
+  $('#back').onclick = () => { location.hash = ''; }; $('#helpb').onclick = e => openHelp(e.currentTarget); bindPicker();
   app.querySelectorAll('[name=me]').forEach(r => r.onchange = () => {
     mine = r.value; sessionStorage.setItem('mine:' + cur.id, mine); rec = []; res = null; barStore = {}; renderRes();
     app.querySelectorAll('.trow').forEach(x => x.classList.toggle('me', x.dataset.k === mine)); dirty = true;
@@ -477,7 +568,7 @@ function startPlay(pos, ci, keep) {
   tracks.forEach(t => { const g = ctx.createGain(); g.gain.value = audible(t.key) ? vol[t.key] : 0; g.connect(master); gains[t.key] = g; });
   sched = tracks.map(t => { const i = t.notes.findIndex(n => n.t >= pos); return { i: i < 0 ? t.notes.length : i }; });
   tracks.forEach(t => { for (const n of t.notes) { if (n.t >= pos) break; if (n.t + n.d > pos + 0.03) voice(t, n, pos); } });
-  clearInterval(timer); timer = setInterval(pump, 60); pump(); $('#play').textContent = 'Stop';
+  clearInterval(timer); timer = setInterval(pump, 60); pump(); $('#play').textContent = tt('stop');
 }
 function pump() {
   if (!playing) return;
@@ -524,14 +615,43 @@ function synth(type, m, a, e, dest) {
 function stop() {
   if (!playing) return;
   playing = false; clearInterval(timer); killVoices(); if (master) { master.gain.value = 0; master.disconnect(); }
-  const b = $('#play'); if (b) b.textContent = 'Play'; dirty = true;
+  const b = $('#play'); if (b) b.textContent = tt('play'); dirty = true;
   finishRun();
 }
 document.addEventListener('keydown', e => {
-  if (e.code !== 'Space' || !$('#cv') || e.target.matches('input[type=text],input[type=number],input[type=password],textarea,select')) return;
+  if (e.code !== 'Space' || !$('#cv') || $('#hv') || e.target.matches('input[type=text],input[type=number],input[type=password],textarea,select')) return;
   e.preventDefault(); if (!e.repeat) toggle();
 });
 document.addEventListener('keyup', e => { if (e.code === 'Space' && $('#cv')) e.preventDefault(); });
+
+/* ---------- help dialog ---------- */
+const helpDots = (x0, x1, y, c) => { let o = ''; for (let x = x0; x <= x1; x += 7) o += `<circle cx="${x}" cy="${y}" r="2.8" style="fill:${c}"/>`; return o; };
+const helpBtn = (x, y, w, label) => `<rect x="${x}" y="${y}" width="${w}" height="20" rx="5" class="hb"/><text x="${x + w / 2}" y="${y + 14}" class="ht s" text-anchor="middle">${label}</text>`;
+const helpRow = (y, name, on) => `<text x="14" y="${y + 20}" class="ht">${name}</text>${helpBtn(14, y + 30, 24, 'M')}${helpBtn(42, y + 30, 24, 'S')}<circle cx="86" cy="${y + 40}" r="6" class="hb"/>${on ? `<circle cx="86" cy="${y + 40}" r="3" style="fill:var(--acc)"/>` : ''}<text x="97" y="${y + 44}" class="ht s">${esc(tt('me'))}</text><rect x="136" y="${y + 30}" width="80" height="20" rx="5" class="hb"/><text x="144" y="${y + 44}" class="ht s">${esc(tt('i_piano'))}</text>`;
+const helpSvg = {
+  me: () => `<svg viewBox="0 0 300 120" aria-hidden="true"><rect x=".5" y=".5" width="299" height="119" rx="10" class="hc"/><rect x="1" y="1" width="298" height="58" rx="9" style="fill:var(--zone)"/>${helpRow(0, 'Soprano', true)}<line x1="1" y1="60" x2="299" y2="60" style="stroke:var(--line)"/>${helpRow(60, 'Alto', false)}<rect x="78" y="28" width="52" height="24" rx="7" class="hl"/></svg>`,
+  mic: () => `<svg viewBox="0 0 300 120" aria-hidden="true"><rect x=".5" y=".5" width="299" height="119" rx="10" class="hc"/><rect x="14" y="43" width="108" height="34" rx="8" class="hb"/><text x="68" y="64" class="ht" text-anchor="middle">${esc(tt('micOff'))}</text><path d="M132 60h24m-6-6 6 6-6 6" style="fill:none;stroke:var(--mut);stroke-width:2"/><rect x="170" y="43" width="116" height="34" rx="8" class="hb"/><circle cx="188" cy="60" r="5" style="fill:var(--rec)"/><text x="200" y="64" class="ht">${esc(tt('micOn'))}</text><rect x="165" y="38" width="126" height="44" rx="11" class="hl"/></svg>`,
+  play: () => `<svg viewBox="0 0 300 120" aria-hidden="true"><rect x=".5" y=".5" width="299" height="119" rx="10" class="hc"/><rect x="30" y="42" width="88" height="36" rx="8" style="fill:var(--acc)"/><text x="74" y="64" class="ht" text-anchor="middle" style="fill:var(--on)">${esc(tt('play'))}</text><text x="144" y="65" class="ht m" text-anchor="middle">${esc(tt('or'))}</text><rect x="170" y="42" width="104" height="40" rx="8" style="fill:var(--line)"/><rect x="170" y="38" width="104" height="38" rx="8" class="hb"/><text x="222" y="61" class="ht" text-anchor="middle">${esc(tt('space'))}</text></svg>`,
+  live: () => `<svg viewBox="0 0 300 120" aria-hidden="true"><rect x=".5" y=".5" width="299" height="119" rx="10" class="hc"/><g style="stroke:var(--line)" opacity=".7"><line x1="8" y1="30" x2="292" y2="30"/><line x1="8" y1="60" x2="292" y2="60"/><line x1="8" y1="90" x2="292" y2="90"/></g><g style="fill:var(--acc)" opacity=".3"><rect x="16" y="78" width="64" height="14" rx="2"/><rect x="92" y="48" width="64" height="14" rx="2"/><rect x="168" y="64" width="84" height="14" rx="2"/></g>${helpDots(19, 77, 85, 'var(--ok)')}${helpDots(95, 153, 70, 'var(--bad)')}${helpDots(190, 211, 71, 'var(--ok)')}<rect x="213" y="8" width="2" height="104" style="fill:var(--bad)"/></svg>`
+};
+let helpOpener = null;
+function closeHelp() {
+  const o = $('#hv'); if (!o) return;
+  o.remove(); document.body.style.overflow = '';
+  if (helpOpener && helpOpener.isConnected) helpOpener.focus();
+  helpOpener = null;
+}
+function openHelp(opener) {
+  closeHelp(); tipHide();
+  const steps = [['me', 'h1t', 'h1d'], ['mic', 'h2t', 'h2d'], ['play', 'h3t', 'h3d'], ['live', 'h4t', 'h4d']];
+  const ov = document.createElement('div'); ov.id = 'hv'; ov.className = 'ov';
+  ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-labelledby', 'ht');
+  ov.innerHTML = `<div class="hp"><button class="x" aria-label="${esc(tt('close'))}">×</button><h2 id="ht">${esc(tt('hTitle'))}</h2><ol class="hs">${steps.map(([k, a, b]) => `<li>${helpSvg[k]()}<div><b>${esc(tt(a))}</b><span>${esc(tt(b))}</span></div></li>`).join('')}</ol></div>`;
+  document.body.appendChild(ov); document.body.style.overflow = 'hidden'; helpOpener = opener;
+  const x = ov.querySelector('.x'); x.focus();
+  ov.onclick = e => { if (e.target === ov || e.target === x) closeHelp(); };
+  ov.onkeydown = e => { if (e.key === 'Escape') closeHelp(); else if (e.key === 'Tab') { e.preventDefault(); x.focus(); } };
+}
 
 /* ---------- semitone keys beside the live view (same pitch axis as the live canvas) ---------- */
 const isBlk = m => [1, 3, 6, 8, 10].includes(((m % 12) + 12) % 12);
@@ -558,7 +678,7 @@ function drawKb(T, lo, hi, next) {
   if (next) {
     const y = Y(next.m);
     g.fillStyle = '#ffb703'; g.fillRect(0, y - step / 2, W, step - 1);
-    if (step >= 9) { g.fillStyle = '#14213d'; g.font = 'bold 8px system-ui'; g.textAlign = 'left'; g.fillText('NEXT', 4, y + .5); }
+    if (step >= 9) { g.fillStyle = '#14213d'; g.font = 'bold 8px system-ui'; g.textAlign = 'left'; g.fillText(tt('next'), 4, y + .5); }
   }
 }
 function bindKb() {
@@ -621,18 +741,18 @@ function summarize() {
 const NEEDS_WORK = .8;
 function why(b) {
   const p = [], miss = b.ns.filter(o => o.cov < .4).length;
-  if (miss) p.push(miss + ' not sung');
+  if (miss) p.push(tt('notSung', { n: miss }));
   const off = b.ns.filter(o => o.cov >= .4 && o.pitch < .7);
-  if (off.length) { const c = median(off.map(o => o.cents)); p.push((c < 0 ? 'flat ' : 'sharp ') + Math.abs(Math.round(c)) + '¢ on ' + off.length); }
+  if (off.length) { const c = median(off.map(o => o.cents)); p.push(tt(c < 0 ? 'flat' : 'sharp', { c: Math.abs(Math.round(c)), n: off.length })); }
   const lt = b.ns.filter(o => o.tim !== null && o.tim < .7 && o.onset !== null);
-  if (lt.length) { const o = median(lt.map(x => x.onset)); p.push((o > 0 ? 'late ' : 'early ') + Math.round(Math.abs(o) * 1000) + ' ms on ' + lt.length); }
-  return p.join(', ') || 'small deviations';
+  if (lt.length) { const o = median(lt.map(x => x.onset)); p.push(tt(o > 0 ? 'late' : 'early', { c: Math.round(Math.abs(o) * 1000), n: lt.length })); }
+  return p.join(', ') || tt('small');
 }
 function finishRun() {
   if (mine && micOn && rec.length) {
     const rb = scoreRun();
     if (rb) { rb.forEach(b => { const o = barStore[b.i]; if (b.full || !o || !o.full) barStore[b.i] = b; }); res = summarize(); renderRes(); }
-    else renderRes(res ? 'Not enough singing detected to analyse the last run.' : 'Not enough singing detected to analyse this run.');
+    else renderRes(tt(res ? 'noRunLast' : 'noRun'));
   }
   dirty = true;
 }
@@ -641,8 +761,8 @@ function renderRes(msg) {
   if (!res) { el.innerHTML = msg ? `<span class="mut">${esc(msg)}</span>` : ''; return; }
   const m = song.measures, top = res.bars.filter(b => b.score < NEEDS_WORK).sort((a, b) => a.score - b.score), MAX = 10;
   el.innerHTML = (msg ? `<div class="mut">${esc(msg)}</div>` : '') + (top.length
-    ? '<div class="mut">Bars to work on, worst first:</div>' + top.slice(0, MAX).map(b => `<button class="ls" data-b="${b.i}"><i class="dot" style="background:hsl(${Math.round(b.score * 120)} 65% 45%)"></i><b>Bar ${m[b.i].n}</b><span class="mut">${esc(why(b))}</span></button>`).join('') + (top.length > MAX ? `<div class="mut" style="margin-top:6px">+ ${top.length - MAX} more</div>` : '')
-    : '<p>Nothing left to work on in the bars sung so far.</p>');
+    ? `<div class="mut">${tt('workOn')}</div>` + top.slice(0, MAX).map(b => `<button class="ls" data-b="${b.i}"><i class="dot" style="background:hsl(${Math.round(b.score * 120)} 65% 45%)"></i><b>${tt('bar')} ${m[b.i].n}</b><span class="mut">${esc(why(b))}</span></button>`).join('') + (top.length > MAX ? `<div class="mut" style="margin-top:6px">${tt('more', { n: top.length - MAX })}</div>` : '')
+    : `<p>${tt('allGood')}</p>`);
   el.querySelectorAll('[data-b]').forEach(b => b.onclick = () => { const x = song.measures[+b.dataset.b]; seek(x.t); reveal(x.t); });
 }
 function drawLive() {
@@ -652,7 +772,7 @@ function drawLive() {
   const g = cv.getContext('2d'), cs = getComputedStyle(document.documentElement), col = n => cs.getPropertyValue(n).trim();
   g.setTransform(r, 0, 0, r, 0, 0); g.clearRect(0, 0, W, H); g.font = '12px system-ui'; g.textBaseline = 'middle';
   const T = tracks.find(x => x.key === mine);
-  if (!T) { g.fillStyle = col('--mut'); g.fillText('Select “Me” on a track to see the line to match.', 12, 24); drawKb(null); return; }
+  if (!T) { g.fillStyle = col('--mut'); g.fillText(tt('pickMe'), 12, 24); drawKb(null); return; }
   const pp = playing ? Math.max(posNow(), anchorPos) : startPos, SPAN = 6, t0 = pp - 2, pxs = W / SPAN, X = t => (t - t0) * pxs;
   const lo = T.lo - 2, hi = T.hi + 2, Y = m => H - 12 - (m - lo) / (hi - lo) * (H - 24);
   g.strokeStyle = col('--line');
@@ -688,7 +808,7 @@ async function toggleMic() {
     const s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
     an = ctx.createAnalyser(); an.fftSize = 4096; ctx.createMediaStreamSource(s).connect(an);
     micOn = true; $('#mic').innerHTML = micHTML(); $('#mic').setAttribute('aria-pressed', 'true');
-  } catch (e) { $('#sc').innerHTML = `<span class="err">Mic unavailable: ${esc(e.message)} (HTTPS required)</span>`; }
+  } catch (e) { $('#sc').innerHTML = `<span class="err">${esc(tt('micErr', { e: e.message }))}</span>`; }
 }
 let lastRms = 0;
 function detect(buf, sr) {
@@ -737,7 +857,7 @@ function frame(id) {
   if (micOn) {
     if ((fc++ & 1) === 0) { an.getFloatTimeDomainData(abuf); hist.push(track(detect(abuf, ctx.sampleRate))); if (hist.length > 5) hist.shift(); }
     const v = hist.filter(x => x).sort((a, b) => a - b), med = v.length >= 3 ? v[v.length >> 1] : 0;
-    const lvEl = $('#lvl'); if (lvEl) lvEl.textContent = 'Mic level ' + '▮'.repeat(Math.max(0, Math.min(10, Math.round(Math.log10(Math.max(lastRms, 1e-4) / 1e-4) * 2.5)))).padEnd(10, '▯') + (med ? ' · ' + Math.round(med) + ' Hz' : ' · no pitch');
+    const lvEl = $('#lvl'); if (lvEl) lvEl.textContent = tt('micLevel') + ' ' + '▮'.repeat(Math.max(0, Math.min(10, Math.round(Math.log10(Math.max(lastRms, 1e-4) / 1e-4) * 2.5)))).padEnd(10, '▯') + (med ? ' · ' + Math.round(med) + ' Hz' : ' · ' + tt('noPitch'));
     let target = null; const live = playing && posNow() >= anchorPos, ts = posNow() - lat * tempo;
     if (live && mine) { const t = tracks.find(x => x.key === mine), n = t && t.notes.find(n => n.t <= ts && ts < n.t + n.d); if (n) target = n.m; }
     let cents = null, m = NaN;
@@ -746,7 +866,7 @@ function frame(id) {
       cents = fold(m - ref) * 100; $('#det').textContent = nnO(Math.round(m));
     } else $('#det').textContent = '–';
     if (live && mine) rec.push([ts, target !== null && med ? cents / 100 : NaN, m, target]);
-    $('#tgt').textContent = target !== null ? 'target ' + nnO(target) : '';
+    $('#tgt').textContent = target !== null ? tt('target') + ' ' + nnO(target) : '';
     const nd = $('#nd');
     if (cents === null) nd.style.left = '50%';
     else { nd.style.left = (50 + Math.max(-100, Math.min(100, cents)) / 2) + '%'; nd.style.background = Math.abs(cents) <= 40 ? 'var(--ok)' : 'var(--bad)'; }
@@ -760,18 +880,23 @@ async function adminView() {
   stop();
   if (!admin || !(await api('/auth').then(() => 1, () => 0))) {
     admin = '';
-    app.innerHTML = `<h1>Admin</h1><input id="pw" type="password" placeholder="Password" autocomplete="current-password">
-      <div class="bar"><button id="go" class="p">Sign in</button><button id="bk">Pieces</button></div><div id="e" class="err"></div>`;
+    app.innerHTML = `<h1>${tt('admin')}</h1><input id="pw" type="password" placeholder="${esc(tt('password'))}" autocomplete="current-password">
+      <div class="bar"><button id="go" class="p">${tt('signIn')}</button><button id="bk">${tt('pieces')}</button></div><div id="e" class="err"></div>`;
     $('#bk').onclick = () => location.hash = '';
-    const go = async () => { admin = $('#pw').value; try { await api('/auth'); sessionStorage.setItem('adm', admin); adminView(); } catch (e) { admin = ''; $('#e').textContent = 'Wrong password'; } };
+    const go = async () => { admin = $('#pw').value; try { await api('/auth'); sessionStorage.setItem('adm', admin); adminView(); } catch (e) { admin = ''; $('#e').textContent = tt('wrongPw'); } };
     $('#go').onclick = go; $('#pw').onkeydown = e => { if (e.key === 'Enter') go(); };
     return;
   }
   pieces = await api('/pieces');
-  app.innerHTML = `<button id="bk">Pieces</button><h1 style="margin-top:14px">Admin</h1>
+  app.innerHTML = `<button id="bk">${tt('pieces')}</button><h1 style="margin-top:14px">${tt('admin')}</h1>
+    <div class="bar" style="margin-top:0"><span class="mut">${tt('langLabel')}</span><button data-lang="en" class="${lang === 'en' ? 'p' : ''}" aria-pressed="${lang === 'en'}">English</button><button data-lang="fr" class="${lang === 'fr' ? 'p' : ''}" aria-pressed="${lang === 'fr'}">Français</button><span class="mut">${tt('langNote')}</span></div>
     <div class="bar"><input id="file" type="file" accept=".mid,.midi"></div><div id="e" class="err"></div>
-    <div>${pieces.map(p => `<div class="row"><span class="lb">${esc(p.title)}<div class="mut">${esc(sub(p))}</div></span><button data-e="${p.id}">Edit</button><button data-d="${p.id}">Delete</button></div>`).join('')}</div>`;
+    <div>${pieces.map(p => `<div class="row"><span class="lb">${esc(p.title)}<div class="mut">${esc(sub(p))}</div></span><button data-e="${p.id}">${tt('edit')}</button><button data-d="${p.id}">${tt('del')}</button></div>`).join('')}</div>`;
   $('#bk').onclick = () => location.hash = '';
+  app.querySelectorAll('[data-lang]').forEach(b => b.onclick = async () => {
+    try { const r = await api('/settings', { method: 'PUT', body: JSON.stringify({ lang: b.dataset.lang }) }); lang = r.lang === 'fr' ? 'fr' : 'en'; document.documentElement.lang = lang; adminView(); }
+    catch (e) { $('#e').textContent = e.message; }
+  });
   $('#file').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;
     try {
@@ -787,19 +912,19 @@ async function adminView() {
     ed = { id: p.id, title: p.title, composer: p.composer || '', date: p.date || '', info: p.info || '', rows }; editor();
   });
   app.querySelectorAll('[data-d]').forEach(b => b.onclick = async () => {
-    if (confirm('Delete this piece?')) { await api('/pieces/' + b.dataset.d, { method: 'DELETE' }); adminView(); }
+    if (confirm(tt('confirmDel'))) { await api('/pieces/' + b.dataset.d, { method: 'DELETE' }); adminView(); }
   });
 }
 function editor() {
-  app.innerHTML = `<h2>${ed.id ? 'Edit piece' : 'New piece'}</h2>
-    <input type="text" id="ti" value="${esc(ed.title)}" aria-label="Title" placeholder="Title">
-    <div class="bar"><input type="text" id="co" value="${esc(ed.composer)}" placeholder="Composer" aria-label="Composer" style="flex:2"><input type="text" id="dt" value="${esc(ed.date)}" placeholder="Date" aria-label="Date" style="flex:1"></div>
-    <textarea id="inf" rows="2" placeholder="Other info: arranger, key, language, notes…" aria-label="Other info">${esc(ed.info)}</textarea>
+  app.innerHTML = `<h2>${tt(ed.id ? 'editPiece' : 'newPiece')}</h2>
+    <input type="text" id="ti" value="${esc(ed.title)}" aria-label="${esc(tt('title'))}" placeholder="${esc(tt('title'))}">
+    <div class="bar"><input type="text" id="co" value="${esc(ed.composer)}" placeholder="${esc(tt('composer'))}" aria-label="${esc(tt('composer'))}" style="flex:2"><input type="text" id="dt" value="${esc(ed.date)}" placeholder="${esc(tt('date'))}" aria-label="${esc(tt('date'))}" style="flex:1"></div>
+    <textarea id="inf" rows="2" placeholder="${esc(tt('otherPh'))}" aria-label="${esc(tt('otherAria'))}">${esc(ed.info)}</textarea>
     <div>${ed.rows.map((r, i) => `<div class="row">
-      <div class="up"><button data-u="${i}" aria-label="Move up">▲</button><button data-w="${i}" aria-label="Move down">▼</button></div>
-      <div class="lb"><input type="text" data-l="${i}" value="${esc(r.label)}" aria-label="Label"><span class="mut">${esc(r.orig)} · ${r.n} notes</span></div>
-      <select data-n="${i}" aria-label="Default instrument">${Object.entries(INST).map(([k, v]) => `<option value="${k}" ${r.inst === k ? 'selected' : ''}>${v}</option>`).join('')}</select><label class="mut"><input type="checkbox" data-h="${i}" ${r.hidden ? 'checked' : ''}> Hide</label></div>`).join('')}</div>
-    <div class="bar"><button id="sv" class="p">Save</button><button id="cn">Cancel</button></div><div id="e" class="err"></div>`;
+      <div class="up"><button data-u="${i}" aria-label="${esc(tt('up'))}">▲</button><button data-w="${i}" aria-label="${esc(tt('down'))}">▼</button></div>
+      <div class="lb"><input type="text" data-l="${i}" value="${esc(r.label)}" aria-label="${esc(tt('label'))}"><span class="mut">${esc(r.orig)} · ${tt('notesN', { n: r.n })}</span></div>
+      <select data-n="${i}" aria-label="${esc(tt('defInst'))}">${Object.keys(INST).map(k => `<option value="${k}" ${r.inst === k ? 'selected' : ''}>${tt('i_' + k)}</option>`).join('')}</select><label class="mut"><input type="checkbox" data-h="${i}" ${r.hidden ? 'checked' : ''}> ${tt('hide')}</label></div>`).join('')}</div>
+    <div class="bar"><button id="sv" class="p">${tt('save')}</button><button id="cn">${tt('cancel')}</button></div><div id="e" class="err"></div>`;
   const sync = () => { ed.title = $('#ti').value; ed.composer = $('#co').value; ed.date = $('#dt').value; ed.info = $('#inf').value; app.querySelectorAll('[data-l]').forEach(i => ed.rows[i.dataset.l].label = i.value); app.querySelectorAll('[data-h]').forEach(i => ed.rows[i.dataset.h].hidden = i.checked); app.querySelectorAll('[data-n]').forEach(i => ed.rows[i.dataset.n].inst = i.value); };
   const mv = (i, j) => { sync(); if (j < 0 || j >= ed.rows.length) return; [ed.rows[i], ed.rows[j]] = [ed.rows[j], ed.rows[i]]; editor(); };
   app.querySelectorAll('[data-u]').forEach(b => b.onclick = () => mv(+b.dataset.u, +b.dataset.u - 1));
@@ -818,7 +943,7 @@ function editor() {
 
 /* ---------- router ---------- */
 const route = () => {
-  loopId++;
+  loopId++; closeHelp();
   if (location.hash === '#admin') return adminView();
   const m = /^#piece\/([0-9a-f]+)$/i.exec(location.hash);
   if (m) { stop(); return openPiece(m[1]); }

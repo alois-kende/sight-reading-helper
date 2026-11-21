@@ -7,6 +7,11 @@ fs.mkdirSync(DATA, { recursive: true });
 const DB = path.join(DATA, 'pieces.json');
 let pieces = fs.existsSync(DB) ? JSON.parse(fs.readFileSync(DB, 'utf8')) : [];
 const save = () => fs.writeFileSync(DB, JSON.stringify(pieces, null, 1));
+// Instance-wide settings live next to the pieces in the data volume, so they survive restarts and updates.
+const SET = path.join(DATA, 'settings.json'), LANGS = ['en', 'fr'];
+const settings = { lang: 'en' };
+try { const j = JSON.parse(fs.readFileSync(SET, 'utf8')); if (LANGS.includes(j.lang)) settings.lang = j.lang; } catch (e) { }
+const saveSettings = () => { fs.writeFileSync(SET + '.tmp', JSON.stringify(settings, null, 1)); fs.renameSync(SET + '.tmp', SET); };
 const send = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
 const readBody = (req, max = 8e6) => new Promise((ok, ko) => {
   const b = []; let n = 0;
@@ -35,9 +40,20 @@ http.createServer(async (req, res) => {
     const p = url.pathname;
     if (p === '/' || p === '/index.html') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
-      return res.end(fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8').replace('__APP_VERSION__', VERSION));
+      return res.end(fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8')
+        .replace('__APP_VERSION__', VERSION).replace('__APP_LANG__', settings.lang).replace('<html lang="en">', '<html lang="' + settings.lang + '">'));
     }
     if (!p.startsWith('/api/')) return send(res, 404, { error: 'not found' });
+    if (p === '/api/settings') {
+      if (req.method === 'GET') return send(res, 200, { lang: settings.lang });
+      if (req.method === 'PUT') {
+        if (!isAdmin(req)) return send(res, 401, { error: 'admin only' });
+        const j = JSON.parse((await readBody(req)).toString());
+        if (!LANGS.includes(j.lang)) return send(res, 400, { error: 'unsupported language' });
+        settings.lang = j.lang; saveSettings();
+        return send(res, 200, { lang: settings.lang });
+      }
+    }
     const m = p.match(/^\/api\/pieces(?:\/([a-f0-9]+))?(\/midi)?$/);
     if (p === '/api/auth') return isAdmin(req) ? send(res, 200, { ok: true }) : send(res, 401, { error: 'bad password' });
     if (!m) return send(res, 404, { error: 'not found' });

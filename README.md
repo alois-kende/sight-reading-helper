@@ -1,12 +1,22 @@
-# Déchiffrage
+# Sight Reading Helper
 
-Sight-reading trainer for choir singers. Load a MIDI score, mute or turn down the other parts, sing your own part into the microphone and get live pitch feedback and a score. Admins upload and label the pieces; everyone else just practises.
+Sight-reading trainer for choir singers. Load a MIDI score, mute or turn down the other parts, sing your own part into the microphone and get live pitch and timing feedback, plus a list of the bars to work on. Admins upload and label the pieces; everyone else just practises.
+
+Open source, released under the MIT licence.
+
+## How it works
+
+1. Tick **Me** on the track you are going to sing.
+2. Turn on the **Mic** (headphones recommended).
+3. Press **Play** (or hit Space).
+
+The live view shows your voice against the notes, so you can see whether you are in tune and on time. The **Help** button on the piece page explains this with pictures.
 
 ## Run
 
 ```bash
-docker run -d --name dechiffrage --restart unless-stopped \
-  -p 3000:3000 -v dechiffrage-data:/app/data \
+docker run -d --name sight-reading-helper --restart unless-stopped \
+  -p 3000:3000 -v sight-reading-helper-data:/app/data \
   -e ADMIN_PASSWORD=choose-a-password \
   ghcr.io/OWNER/REPO:latest
 ```
@@ -16,7 +26,11 @@ or copy `docker-compose.yml` to the server and run `docker compose up -d`.
 - App: `http://localhost:3000`, admin page: `/#admin`.
 - Without Docker: `node server.js` (Node 18 or newer, no dependencies).
 - `ADMIN_PASSWORD` defaults to `password`. Change it.
-- Pieces are stored in `/app/data`. Keep that volume, and back it up.
+- Pieces and settings are stored in `/app/data`. Keep that volume, and back it up.
+
+## Language
+
+The interface is available in English (default) and French. An admin switches it on the admin page (`/#admin`); the choice applies to everyone and is saved in `/app/data/settings.json`, so it survives restarts and updates as long as the data volume is kept.
 
 ## HTTPS
 
