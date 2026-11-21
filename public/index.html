@@ -43,9 +43,8 @@ textarea{background:var(--card);border:1px solid var(--line);border-radius:8px;p
 #lv{border:1px solid var(--line);border-radius:8px;background:var(--card);cursor:default}
 .card{margin:12px 0;padding:12px;background:var(--card);border:1px solid var(--line);border-radius:8px}
 #res:empty{display:none}
-.score .num{font:700 56px/1 Georgia,serif}
 .ls{display:flex;gap:10px;width:100%;text-align:left;margin-top:6px;align-items:baseline;flex-wrap:wrap}
-.ls span:nth-of-type(1){color:var(--bad);min-width:48px}
+.ls .dot{width:10px;height:10px;border-radius:50%;flex:none;align-self:center}
 .hide{display:none}
 select{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:6px;font:inherit;min-height:32px}
 .tl{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card)}
@@ -98,6 +97,7 @@ const api = async (p, o = {}) => {
 };
 
 const APP_VERSION = '__APP_VERSION__';
+const TITLE0 = document.title;
 const APP_REPO = 'https://github.com/alois-kende/sight-reading-helper';
 
 /* ---------- info bubbles: hover shows, click locks until click elsewhere / scroll ---------- */
@@ -148,7 +148,7 @@ document.addEventListener('scroll', e => { if (!tipBox.hidden && !tipBox.contain
 addEventListener('resize', tipHide);
 addEventListener('keydown', e => { if (e.key === 'Escape') tipHide(); });
 const micHTML = () => micOn ? '<span class="rdot" aria-hidden="true"></span>Mic: on' : 'Mic: off';
-const appTip = () => `<div>Sight-reading trainer for choir singers: load a MIDI score, mute or turn down the other parts, sing your own part into the microphone and get live pitch feedback and a score.</div><div>Source code: <a href="${APP_REPO}" target="_blank" rel="noopener">${APP_REPO.replace('https://', '')}</a></div><div class="mut">Version ${esc(APP_VERSION.startsWith('__') ? 'dev' : APP_VERSION)}</div>`;
+const appTip = () => `<div>Sight-reading trainer for choir singers: load a MIDI score, mute or turn down the other parts, sing your own part into the microphone and get live pitch feedback and a list of the bars to work on.</div><div>Source code: <a href="${APP_REPO}" target="_blank" rel="noopener">${APP_REPO.replace('https://', '')}</a></div><div class="mut">Version ${esc(APP_VERSION.startsWith('__') ? 'dev' : APP_VERSION)}</div>`;
 const pieceTip = p => (sub(p) ? `<div><b>${esc(sub(p))}</b></div>` : '') + (p.info ? `<div class="info">${esc(p.info)}</div>` : '');
 
 /* ---------- MIDI parser ---------- */
@@ -245,7 +245,7 @@ const guessComposer = tx => { const m = tx.map(x => /^\s*(?:by|composer:?)\s+(.+
 const guessInfo = tx => tx.filter(x => !/^\s*(?:by|composer:?)\s+/i.test(x)).join('\n');
 const sub = p => [p.composer, p.date].filter(Boolean).join(' · ');
 async function listView() {
-  loopId++; stop(); app.className = 'narrow';
+  loopId++; stop(); app.className = 'narrow'; document.title = TITLE0;
   tipHide(); app.innerHTML = `<h1>Déchiffrage${tipBtn(appTip(), 'About this app')}</h1><div id="l">Loading…</div>`;
   try { pieces = await api('/pieces'); } catch (e) { $('#l').innerHTML = `<span class="err">${esc(e.message)}</span>`; return; }
   if (!pieces.length) { $('#l').innerHTML = '<p class="mut">No pieces yet. An admin can add one at <a href="#admin">#admin</a>.</p>'; return; }
@@ -253,13 +253,13 @@ async function listView() {
   const show = () => {
     const r = pieces.filter(p => matches(p, $('#q').value));
     $('#rows').innerHTML = r.length ? r.map(p => `<div class="row"><span class="lb">${esc(p.title)}<div class="mut">${esc(sub(p))}</div></span><button data-id="${p.id}" class="p">Open</button></div>`).join('') : '<p class="mut">No match.</p>';
-    app.querySelectorAll('[data-id]').forEach(b => b.onclick = () => openPiece(b.dataset.id));
+    app.querySelectorAll('[data-id]').forEach(b => b.onclick = () => { location.hash = '#piece/' + b.dataset.id; });
   };
   $('#q').oninput = show; show();
 }
 function bindPicker() {
   const inp = $('#ps'), box = $('#pl'); let typed = false, act = 0, list = [];
-  const choose = id => { box.classList.add('hide'); inp.blur(); if (id && id !== cur.id) { stop(); openPiece(id); } };
+  const choose = id => { box.classList.add('hide'); inp.blur(); if (id && id !== cur.id) { stop(); location.hash = '#piece/' + id; } };
   const draw = () => {
     list = pieces.filter(p => !typed || matches(p, inp.value)); act = Math.min(act, Math.max(0, list.length - 1));
     box.innerHTML = list.length ? list.map((p, i) => `<button data-id="${p.id}" class="${i === act ? 'act' : ''}"><b>${esc(p.title)}</b><div class="mut">${esc(sub(p))}</div></button>`).join('') : '<div class="mut" style="padding:10px">No match</div>';
@@ -279,8 +279,15 @@ function bindPicker() {
 }
 
 async function openPiece(id) {
-  tipHide(); cur = pieces.find(p => p.id === id); app.className = 'narrow'; app.innerHTML = '<p>Loading…</p>';
-  try { song = await loadMidi(id); } catch (e) { app.innerHTML = `<p class="err">${esc(e.message)}</p>`; return; }
+  tipHide(); app.className = 'narrow'; app.innerHTML = '<p>Loading…</p>';
+  try {
+    if (!pieces.some(p => p.id === id)) pieces = await api('/pieces');
+    cur = pieces.find(p => p.id === id);
+    if (!cur) { app.innerHTML = '<p class="err">Piece not found.</p><p><a href="#">Back to the list</a></p>'; return; }
+    document.title = cur.title + ' – ' + TITLE0;
+    song = await loadMidi(id);
+  } catch (e) { app.innerHTML = `<p class="err">${esc(e.message)}</p><p><a href="#">Back to the list</a></p>`; return; }
+  if (location.hash !== '#piece/' + id) return;
   tracks = orderTracks(song, cur, false);
   try { ov = JSON.parse(localStorage.getItem('inst:' + id) || '{}'); } catch (e) { ov = {}; }
   inst = {}; tracks.forEach(t => inst[t.key] = INST[ov[t.key]] ? ov[t.key] : t.inst);
@@ -293,7 +300,7 @@ async function openPiece(id) {
 function playerView() {
   const opts = k => Object.entries(INST).map(([v, l]) => `<option value="${v}" ${inst[k] === v ? 'selected' : ''}>${l}</option>`).join('');
   app.innerHTML = `<div class="bar" style="margin-top:0"><button id="back">Pieces</button><div class="pickw"><div class="pick"><input type="text" id="ps" value="${esc(cur.title)}" title="${esc(cur.title)}" autocomplete="off" aria-label="Choose a piece: search by title, composer, date or info"><div id="pl" class="plist hide"></div></div>${sub(cur) || cur.info ? tipBtn(pieceTip(cur), 'About this piece') : ''}</div></div>
-  <div class="bar"><button id="play" class="p">Play</button><button id="home" aria-label="Back to start">⏮ Start</button><button id="mic" aria-pressed="${micOn}">${micHTML()}</button><button id="rs">Reset score</button>
+  <div class="bar"><button id="play" class="p">Play</button><button id="home" aria-label="Back to start">⏮ Start</button><button id="mic" aria-pressed="${micOn}">${micHTML()}</button><button id="rs">Reset results</button>
     <label class="mut"><input type="checkbox" id="ci" checked> Count-in</label>
     <label class="mut">Latency <input id="lat" type="number" min="0" max="500" step="10" value="${Math.round(lat * 1000)}" style="width:68px;min-height:36px">ms</label><span class="mut">Bar</span><button id="bp" aria-label="Previous bar">−</button><input id="bar" type="number" min="1" max="${song.measures.length}" value="1" style="width:58px;min-height:36px;text-align:center"><button id="bn" aria-label="Next bar">+</button><span class="mut" id="bpm"></span></div>
   <div class="bar"><label class="mut">Volume <input id="mv" type="range" min="0" max="150" step="5" value="${Math.round(mvol * 100)}"></label><label class="mut">Tempo <input id="tp" type="range" min="25" max="250" step="5" value="${Math.round(tempo * 100)}"> <span id="tv">${Math.round(tempo * 100)}%</span></label>
@@ -306,8 +313,8 @@ function playerView() {
   <div class="live"><div class="big"><span id="det">–</span><span id="tgt" class="mut">–</span></div><div class="lvrow"><canvas id="kb" style="height:230px" aria-label="Note keys: click to hear a note"></canvas><canvas id="lv" style="height:230px"></canvas></div><div class="mut" id="lvl" style="font-size:12px"></div>
   <div class="meter"><div class="zone"></div><div class="mid"></div><div class="needle" id="nd"></div></div></div></div>
   <div id="res" class="card"></div>
-  <div class="mut" id="sc">Space: play/stop. Click the timeline to set the start point; stop returns to it. Wheel zooms, shift+wheel or drag pans. Headphones required. Mic on and “Me” selected = scored run. Dots show true pitch; hollow = right note, other octave. Click a key beside the live view to hear that note (e.g. your starting pitch); NEXT marks the next note to sing.</div>`;
-  $('#back').onclick = listView; bindPicker();
+  <div class="mut" id="sc">Space: play/stop. Click the timeline to set the start point; stop returns to it. Wheel zooms, shift+wheel or drag pans. Headphones required. Mic on and “Me” selected = analysed run: the bars to work on are listed below and coloured on the timeline. Dots show true pitch; hollow = right note, other octave. Click a key beside the live view to hear that note (e.g. your starting pitch); NEXT marks the next note to sing.</div>`;
+  $('#back').onclick = () => { location.hash = ''; }; bindPicker();
   app.querySelectorAll('[name=me]').forEach(r => r.onchange = () => {
     mine = r.value; sessionStorage.setItem('mine:' + cur.id, mine); rec = []; res = null; barStore = {}; renderRes();
     app.querySelectorAll('.trow').forEach(x => x.classList.toggle('me', x.dataset.k === mine)); dirty = true;
@@ -604,18 +611,14 @@ function scoreRun() {
   out.forEach(o => { const b = by[o.bar] = by[o.bar] || { i: o.bar, w: 0, s: 0, ns: [] }; b.w += o.w; b.s += o.score * o.w; b.ns.push(o); });
   return Object.values(by).map(b => ({ ...b, full: b.ns.length >= (tot[b.i] || 0) }));
 }
-// Scores persist per bar across runs: a bar is replaced only when it is sung again (a partly covered bar never overwrites a complete one).
+// Results persist per bar across runs: a bar is replaced only when it is sung again (a partly covered bar never overwrites a complete one).
 function summarize() {
   const bars = Object.values(barStore); if (!bars.length) return null;
-  const W = bars.reduce((s, b) => s + b.w, 0), all = bars.flatMap(b => b.ns), byBar = {};
-  bars.forEach(b => { b.score = b.s / b.w; b.loss = (b.w - b.s) / W * 100; byBar[b.i] = b.score; });
-  const tm = all.filter(o => o.tim !== null), tw = tm.reduce((s, o) => s + o.w, 0), idx = bars.map(b => b.i);
-  return {
-    score: Math.max(0, 100 - bars.reduce((s, b) => s + b.loss, 0)), count: all.length, missed: all.filter(o => o.cov < .4).length,
-    pitch: all.reduce((s, o) => s + o.pitch * o.w, 0) / W, timing: tw ? tm.reduce((s, o) => s + o.tim * o.w, 0) / tw : 1,
-    bars, byBar, b0: Math.min(...idx), b1: Math.max(...idx), n: bars.length
-  };
+  const byBar = {};
+  bars.forEach(b => { b.score = b.s / b.w; byBar[b.i] = b.score; });
+  return { bars, byBar };
 }
+const NEEDS_WORK = .8;
 function why(b) {
   const p = [], miss = b.ns.filter(o => o.cov < .4).length;
   if (miss) p.push(miss + ' not sung');
@@ -629,18 +632,17 @@ function finishRun() {
   if (mine && micOn && rec.length) {
     const rb = scoreRun();
     if (rb) { rb.forEach(b => { const o = barStore[b.i]; if (b.full || !o || !o.full) barStore[b.i] = b; }); res = summarize(); renderRes(); }
-    else renderRes(res ? 'Not enough singing detected to score the last run.' : 'Not enough singing detected to score this run.');
+    else renderRes(res ? 'Not enough singing detected to analyse the last run.' : 'Not enough singing detected to analyse this run.');
   }
   dirty = true;
 }
 function renderRes(msg) {
   const el = $('#res'); if (!el) return;
   if (!res) { el.innerHTML = msg ? `<span class="mut">${esc(msg)}</span>` : ''; return; }
-  const rng = res.n === res.b1 - res.b0 + 1 ? 'bars ' + song.measures[res.b0].n + '–' + song.measures[res.b1].n : res.n + ' bars scored (' + song.measures[res.b0].n + '–' + song.measures[res.b1].n + ')';
-  const m = song.measures, top = res.bars.filter(b => b.loss >= .3).sort((a, b) => b.loss - a.loss).slice(0, 8);
-  el.innerHTML = `<div class="score"><span class="num">${Math.round(res.score)}</span><span class="mut"> / 100 · ${res.count} notes · ${rng}</span></div>${msg ? `<div class="mut">${esc(msg)}</div>` : ''}
-  <div class="mut">Pitch ${Math.round(res.pitch * 100)} · Timing ${Math.round(res.timing * 100)} · ${res.missed} not sung</div>
-  ${top.length ? top.map(b => `<button class="ls" data-b="${b.i}"><b>Bar ${m[b.i].n}</b><span>−${b.loss.toFixed(1)}</span><span class="mut">${esc(why(b))}</span></button>`).join('') : '<p>No bar lost more than 0.3 points.</p>'}`;
+  const m = song.measures, top = res.bars.filter(b => b.score < NEEDS_WORK).sort((a, b) => a.score - b.score), MAX = 10;
+  el.innerHTML = (msg ? `<div class="mut">${esc(msg)}</div>` : '') + (top.length
+    ? '<div class="mut">Bars to work on, worst first:</div>' + top.slice(0, MAX).map(b => `<button class="ls" data-b="${b.i}"><i class="dot" style="background:hsl(${Math.round(b.score * 120)} 65% 45%)"></i><b>Bar ${m[b.i].n}</b><span class="mut">${esc(why(b))}</span></button>`).join('') + (top.length > MAX ? `<div class="mut" style="margin-top:6px">+ ${top.length - MAX} more</div>` : '')
+    : '<p>Nothing left to work on in the bars sung so far.</p>');
   el.querySelectorAll('[data-b]').forEach(b => b.onclick = () => { const x = song.measures[+b.dataset.b]; seek(x.t); reveal(x.t); });
 }
 function drawLive() {
@@ -815,6 +817,12 @@ function editor() {
 }
 
 /* ---------- router ---------- */
-const route = () => { loopId++; return location.hash === '#admin' ? adminView() : listView(); };
+const route = () => {
+  loopId++;
+  if (location.hash === '#admin') return adminView();
+  const m = /^#piece\/([0-9a-f]+)$/i.exec(location.hash);
+  if (m) { stop(); return openPiece(m[1]); }
+  return listView();
+};
 addEventListener('hashchange', route); route();
 </script></body></html>
