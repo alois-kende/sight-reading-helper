@@ -99,6 +99,10 @@ h1 .ib{margin-left:10px;position:relative;top:-3px}
 .hs b::before{content:counter(s) '. ';color:var(--mut)}
 .hs span{display:block;color:var(--mut);font-size:14px}
 @media(max-width:560px){.hs li{grid-template-columns:1fr;gap:10px}}
+.bar.mix{gap:10px 32px}
+.mix label,.grp{display:inline-flex;align-items:center;gap:8px}
+.mix input[type=range]{margin:0}
+#tv{display:inline-block;min-width:4ch;text-align:right}
 #setb{display:inline-flex;align-items:center;justify-content:center;width:40px;padding:0}
 .sg{padding:14px 0;border-bottom:1px solid var(--line)}
 .sg:last-child{border-bottom:0}
@@ -122,7 +126,7 @@ const L = {
     play: 'Play', stop: 'Stop', start: '⏮ Start', toStart: 'Back to start',
     micOn: 'Mic: on', micOff: 'Mic: off', reset: 'Reset results', countIn: 'Count-in', latency: 'Latency',
     bar: 'Bar', prevBar: 'Previous bar', nextBar: 'Next bar', volume: 'Volume', tempo: 'Tempo',
-    zoomOut: 'Zoom out', zoomIn: 'Zoom in', fit: 'Fit', mute: 'Mute', solo: 'Solo', me: 'Me', instrument: 'Instrument',
+    mute: 'Mute', solo: 'Solo', me: 'Me', instrument: 'Instrument',
     i_sine: 'Sine', i_piano: 'Piano', i_organ: 'Organ', i_choir: 'Choir', i_strings: 'Strings', i_flute: 'Flute',
     keys: 'Note keys: click to hear a note', next: 'NEXT', tips: 'Usage tips',
     hint: 'Space: play/stop. Click the timeline to set the start point; stop returns to it. Wheel zooms, shift+wheel or drag pans. Headphones required. Mic on and “Me” selected = analysed run: the bars to work on are listed below and coloured on the timeline. Dots show true pitch.',
@@ -161,7 +165,7 @@ const L = {
     play: 'Lecture', stop: 'Stop', start: '⏮ Début', toStart: 'Retour au début',
     micOn: 'Micro\u00a0: on', micOff: 'Micro\u00a0: off', reset: 'Réinitialiser les résultats', countIn: 'Décompte', latency: 'Latence',
     bar: 'Mesure', prevBar: 'Mesure précédente', nextBar: 'Mesure suivante', volume: 'Volume', tempo: 'Tempo',
-    zoomOut: 'Zoom arrière', zoomIn: 'Zoom avant', fit: 'Ajuster', mute: 'Muet', solo: 'Solo', me: 'Moi', instrument: 'Instrument',
+    mute: 'Muet', solo: 'Solo', me: 'Moi', instrument: 'Instrument',
     i_sine: 'Sinus', i_piano: 'Piano', i_organ: 'Orgue', i_choir: 'Chœur', i_strings: 'Cordes', i_flute: 'Flûte',
     keys: 'Touches\u00a0: cliquez pour entendre une note', next: 'SUIVANT', tips: 'Conseils d’utilisation',
     hint: 'Espace\u00a0: lecture/arrêt. Cliquez sur la frise pour choisir le point de départ\u00a0; l’arrêt y revient. La molette zoome, Maj+molette ou glisser déplace. Casque obligatoire. Micro activé et «\u00a0Moi\u00a0» coché = passe analysée\u00a0: les mesures à travailler sont listées plus bas et colorées sur la frise. Les points montrent la hauteur réelle.',
@@ -431,9 +435,9 @@ function playerView() {
   app.innerHTML = `<div class="bar" style="margin-top:0"><button id="back">${tt('pieces')}</button><div class="pickw"><div class="pick"><input type="text" id="ps" value="${esc(cur.title)}" title="${esc(cur.title)}" autocomplete="off" aria-label="${esc(tt('pickAria'))}"><div id="pl" class="plist hide"></div></div>${sub(cur) || cur.info ? tipBtn(pieceTip(cur), tt('aboutPiece')) : ''}</div><button id="helpb">${tt('help')}</button></div>
   <div class="bar"><button id="play" class="p">${tt('play')}</button><button id="home" aria-label="${esc(tt('toStart'))}">${tt('start')}</button><button id="mic" aria-pressed="${micOn}">${micHTML()}</button><button id="rs">${tt('reset')}</button>
     <label class="mut"><input type="checkbox" id="ci" checked> ${tt('countIn')}</label>
-    <button id="setb" aria-label="${esc(tt('settings'))}" title="${esc(tt('settings'))}"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="${COG}"/></svg></button><span class="mut">${tt('bar')}</span><button id="bp" aria-label="${esc(tt('prevBar'))}">−</button><input id="bar" type="number" min="1" max="${song.measures.length}" value="1" style="width:58px;min-height:36px;text-align:center"><button id="bn" aria-label="${esc(tt('nextBar'))}">+</button><span class="mut" id="bpm"></span>${tipBtn(tt('hint').split(/(?<=\.)\s+/).map(x => `<div>${esc(x)}</div>`).join(''), tt('tips'))}</div>
-  <div class="bar"><label class="mut">${tt('volume')} <input id="mv" type="range" min="0" max="150" step="5" value="${Math.round(mvol * 100)}"></label><label class="mut">${tt('tempo')} <input id="tp" type="range" min="25" max="250" step="5" value="${Math.round(tempo * 100)}"> <span id="tv">${Math.round(tempo * 100)}%</span></label>
-    <button id="t100">100%</button><button id="zo" aria-label="${esc(tt('zoomOut'))}">−</button><button id="zi" aria-label="${esc(tt('zoomIn'))}">+</button><button id="zf">${tt('fit')}</button></div>
+    <button id="setb" aria-label="${esc(tt('settings'))}" title="${esc(tt('settings'))}"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="${COG}"/></svg></button></div>
+  <div class="bar mix"><label class="mut">${tt('volume')} <input id="mv" type="range" min="0" max="150" step="5" value="${Math.round(mvol * 100)}"></label><label class="mut">${tt('tempo')} <input id="tp" type="range" min="25" max="250" step="5" value="${Math.round(tempo * 100)}"><span id="tv">${Math.round(tempo * 100)}%</span><span id="bpm"></span></label>
+    <span class="grp"><span class="mut">${tt('bar')}</span><button id="bp" aria-label="${esc(tt('prevBar'))}">−</button><input id="bar" type="number" min="1" max="${song.measures.length}" value="1" style="width:58px;min-height:36px;text-align:center"><button id="bn" aria-label="${esc(tt('nextBar'))}">+</button>${tipBtn(tt('hint').split(/(?<=\.)\s+/).map(x => `<div>${esc(x)}</div>`).join(''), tt('tips'))}</span></div>
   <div class="split"><div class="tlwrap"><div class="tl"><div class="gut"><div class="sp" style="height:${RH}px"></div>${tracks.map(t => `<div class="trow ${t.key === mine ? 'me' : ''}" data-k="${t.key}" style="height:${LH}px">
     <div class="top"><span class="lb">${esc(t.label)}</span><input type="range" class="vol" data-v="${t.key}" min="0" max="150" step="5" value="${Math.round(vol[t.key] * 100)}" aria-label="${esc(tt('volume'))}"></div><div class="ctl"><button data-m="${t.key}" aria-label="${esc(tt('mute'))}">M</button><button data-s="${t.key}" aria-label="${esc(tt('solo'))}" aria-pressed="false">S</button>
     <label><input type="radio" name="me" value="${t.key}" ${t.key === mine ? 'checked' : ''}> ${tt('me')}</label>
@@ -469,14 +473,11 @@ function playerView() {
   $('#play').onclick = toggle; $('#mic').onclick = toggleMic;
   $('#tp').oninput = e => setTempo(e.target.value / 100);
   $('#tp').onchange = () => { if (playing) startPlay(Math.max(posNow(), anchorPos), false, true); };
-  $('#t100').onclick = () => { $('#tp').value = 100; setTempo(1); if (playing) startPlay(Math.max(posNow(), anchorPos), false, true); };
   $('#bar').onchange = e => { const m = song.measures[Math.max(1, Math.min(+e.target.value || 1, song.measures.length)) - 1]; seek(m.t); reveal(m.t); e.target.blur(); };
   const step = d => { const pp = playing ? Math.max(posNow(), anchorPos) : startPos, t = song.measures[Math.max(0, Math.min(barIdx(pp) + d, song.measures.length - 1))].t; seek(t); reveal(t); };
   $('#bp').onclick = () => step(-1); $('#bn').onclick = () => step(1);
   $('#home').onclick = () => { seek(0); reveal(0); };
   $('#rs').onclick = () => { rec = []; res = null; barStore = {}; hist = []; resetTrack(); renderRes(); dirty = true; };
-  const W = () => $('#cv').clientWidth;
-  $('#zi').onclick = () => zoomAt(W() / 2, 1.6); $('#zo').onclick = () => zoomAt(W() / 2, 1 / 1.6); $('#zf').onclick = fitView;
   bindTl(); fitView(); bindKb(); refreshMix(); renderRes(); loopId++; frame(loopId);
 }
 
