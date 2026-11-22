@@ -316,7 +316,7 @@ const audible = k => !muted.has(k) && (!solo.size || solo.has(k));
 function refreshMix() {
   app.querySelectorAll('[data-m]').forEach(b => { const k = b.dataset.m; b.className = muted.has(k) ? 'on' : (solo.size && !solo.has(k) ? 'dim' : ''); });
   app.querySelectorAll('[data-s]').forEach(b => { b.className = solo.has(b.dataset.s) ? 'sol' : ''; b.setAttribute('aria-pressed', solo.has(b.dataset.s)); });
-  Object.keys(gains).forEach(k => { gains[k].gain.value = audible(k) ? vol[k] : 0; }); dirty = true;
+  Object.keys(gains).forEach(k => { if (typeof vol[k] === 'number') gains[k].gain.value = audible(k) ? vol[k] : 0; }); dirty = true;
 }
 const orderTracks = (parsed, meta, all) => {
   const by = Object.fromEntries(parsed.tracks.map(t => [t.key, t])), out = [];
@@ -385,7 +385,7 @@ async function openPiece(id) {
   try { vol = JSON.parse(localStorage.getItem('vol:' + id) || '{}'); } catch (e) { vol = {}; }
   tracks.forEach(t => { if (typeof vol[t.key] !== 'number') vol[t.key] = 1; });
   mine = sessionStorage.getItem('mine:' + id); if (!tracks.some(t => t.key === mine)) mine = null;
-  muted = new Set(); solo = new Set(); startPos = 0; rec = []; res = null; barStore = {}; app.className = ''; playerView();
+  muted = new Set(); solo = new Set(); gains = {}; startPos = 0; rec = []; res = null; barStore = {}; app.className = ''; playerView();
 }
 
 function playerView() {
