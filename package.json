@@ -1,6 +1,6 @@
 {
   "name": "sight-reading-helper",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "private": true,
   "license": "MIT",
   "description": "Sight-reading trainer for choir singers: MIDI playback, live pitch feedback and a list of the bars to work on.",
