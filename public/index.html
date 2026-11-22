@@ -331,7 +331,7 @@ const INST = { sine: 'Sine', piano: 'Piano', organ: 'Organ', choir: 'Choir', str
 const guess = n => /string|violin|synth|d'bass/i.test(n) ? 'strings' : 'piano';
 let pieces = [], cur = null, song = null, tracks = [], mine = null, muted = new Set(), solo = new Set(), inst = {}, ov = {}, vol = {};
 let tempo = 1, ctx, master, lfoG, gains = {}, playing = false, startPos = 0, anchorCtx = 0, anchorPos = 0, sched = [], timer = null;
-let rec = [], res = null, barStore = {}, lat = 0.12, mvol = 1, an, micOn = false, hist = [], okN = 0, totN = 0, loopId = 0, view = { t0: 0, pps: 50 }, dirty = true;
+let rec = [], res = null, barStore = {}, lat = 0.17, mvol = 1, an, micOn = false, hist = [], okN = 0, totN = 0, loopId = 0, view = { t0: 0, pps: 50 }, dirty = true;
 const LH = 60, RH = 26, TH = 34, Y0 = RH;
 try { const sv = localStorage.getItem("lat"); if (sv !== null) lat = +sv; const mv = localStorage.getItem("mvol"); if (mv !== null) mvol = +mv; } catch (e) { }
 let countIn = true; try { const ci = localStorage.getItem('ci'); if (ci !== null) countIn = ci === '1'; } catch (e) { }
