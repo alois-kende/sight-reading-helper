@@ -12,6 +12,13 @@ Open source, released under the MIT licence.
 
 The live view shows your voice against the notes, so you can see whether you are in tune and on time. The **Help** button on the piece page explains this with pictures.
 
+## Settings
+
+The cogwheel button on the piece page opens the personal settings, stored in your browser:
+
+- **My voice** (Soprano, Alto, Tenor or Bass): the matching track is ticked as "Me" when you open a piece. Tracks are matched by their label (then their MIDI name), so labels such as "Soprano 1", "Alto", "Tenor", "Basse" or "B" work.
+- **Latency**: the delay between what you sing and what the app detects. Type a value, or run the latency test: with headphones on, sing a short "ta" on each of the ten clicks and the app sets the value for you.
+
 ## Run
 
 ```bash

@@ -99,6 +99,10 @@ h1 .ib{margin-left:10px;position:relative;top:-3px}
 .hs b::before{content:counter(s) '. ';color:var(--mut)}
 .hs span{display:block;color:var(--mut);font-size:14px}
 @media(max-width:560px){.hs li{grid-template-columns:1fr;gap:10px}}
+#setb{display:inline-flex;align-items:center;justify-content:center;width:40px;padding:0}
+.sg{padding:14px 0;border-bottom:1px solid var(--line)}
+.sg:last-child{border-bottom:0}
+.sg select{display:block;margin:6px 0}
 </style></head><body><main id="app"></main>
 <script>
 const $ = s => document.querySelector(s), app = $('#app');
@@ -138,7 +142,14 @@ const L = {
     editPiece: 'Edit piece', newPiece: 'New piece', title: 'Title', composer: 'Composer', date: 'Date',
     otherPh: 'Other info: arranger, key, language, notes…', otherAria: 'Other info', up: 'Move up', down: 'Move down',
     label: 'Label', defInst: 'Default instrument', hide: 'Hide', save: 'Save', cancel: 'Cancel', notesN: '{n} notes',
-    langLabel: 'Language', langNote: 'Applies to everyone using this server.'
+    langLabel: 'Language', langNote: 'Applies to everyone using this server.',
+    settings: 'Settings', voiceLabel: 'My voice', voiceNone: 'Not set', v_s: 'Soprano', v_a: 'Alto', v_t: 'Tenor', v_b: 'Bass',
+    voiceHint: 'The matching track is ticked as “Me” when you open a piece.',
+    latHint: 'Delay between what you sing and what the app detects (headphones, Bluetooth and the microphone all add some). Used to place your notes in time.',
+    calBtn: 'Run latency test', calHelp: 'Wear headphones. Start the test, then sing a short “ta” on each click.',
+    calGet: 'Get ready…', calRun: 'Sing “ta” on each click… {k}/{n}', calMic: 'Turn on the microphone to run the test.',
+    calOk: 'Latency set to {ms} ms ({k} clicks measured).', calFew: 'Not enough clear notes heard ({k} of {n}). Sing a short “ta” on each click and try again.',
+    calBad: 'The results were too inconsistent. Try again in a quieter place.'
   },
   fr: {
     app: 'Sight Reading Helper', loading: 'Chargement…',
@@ -170,7 +181,14 @@ const L = {
     editPiece: 'Modifier le morceau', newPiece: 'Nouveau morceau', title: 'Titre', composer: 'Compositeur', date: 'Date',
     otherPh: 'Autres infos\u00a0: arrangeur, tonalité, langue, notes…', otherAria: 'Autres infos', up: 'Monter', down: 'Descendre',
     label: 'Nom', defInst: 'Instrument par défaut', hide: 'Masquer', save: 'Enregistrer', cancel: 'Annuler', notesN: '{n} notes',
-    langLabel: 'Langue', langNote: 'S’applique à tous les utilisateurs de ce serveur.'
+    langLabel: 'Langue', langNote: 'S’applique à tous les utilisateurs de ce serveur.',
+    settings: 'Réglages', voiceLabel: 'Ma voix', voiceNone: 'Non définie', v_s: 'Soprano', v_a: 'Alto', v_t: 'Ténor', v_b: 'Basse',
+    voiceHint: 'La piste correspondante est cochée «\u00a0Moi\u00a0» à l’ouverture d’un morceau.',
+    latHint: 'Délai entre ce que vous chantez et ce que l’application détecte (casque, Bluetooth et micro en ajoutent). Sert à placer vos notes dans le temps.',
+    calBtn: 'Lancer le test de latence', calHelp: 'Portez un casque. Lancez le test, puis chantez un «\u00a0ta\u00a0» court sur chaque clic.',
+    calGet: 'Préparez-vous…', calRun: 'Chantez «\u00a0ta\u00a0» sur chaque clic… {k}/{n}', calMic: 'Activez le micro pour lancer le test.',
+    calOk: 'Latence réglée à {ms} ms ({k} clics mesurés).', calFew: 'Pas assez de notes nettes entendues ({k} sur {n}). Chantez un «\u00a0ta\u00a0» court sur chaque clic et réessayez.',
+    calBad: 'Les résultats étaient trop irréguliers. Réessayez dans un endroit plus calme.'
   }
 };
 const tt = (k, v) => {
@@ -311,6 +329,7 @@ let tempo = 1, ctx, master, lfoG, gains = {}, playing = false, startPos = 0, anc
 let rec = [], res = null, barStore = {}, lat = 0.12, mvol = 1, an, micOn = false, hist = [], okN = 0, totN = 0, loopId = 0, view = { t0: 0, pps: 50 }, dirty = true;
 const LH = 60, RH = 26, TH = 34, Y0 = RH;
 try { const sv = localStorage.getItem("lat"); if (sv !== null) lat = +sv; const mv = localStorage.getItem("mvol"); if (mv !== null) mvol = +mv; } catch (e) { }
+let myVoice = ''; try { myVoice = localStorage.getItem('voice') || ''; if (!['', 's', 'a', 't', 'b'].includes(myVoice)) myVoice = ''; } catch (e) { }
 
 const audible = k => !muted.has(k) && (!solo.size || solo.has(k));
 function refreshMix() {
@@ -335,6 +354,24 @@ const matches = (p, q) => norm(q).split(/\s+/).filter(Boolean).every(w => hay(p)
 const guessComposer = tx => { const m = tx.map(x => /^\s*(?:by|composer:?)\s+(.+)/i.exec(x)).find(Boolean); return m ? m[1].trim() : ''; };
 const guessInfo = tx => tx.filter(x => !/^\s*(?:by|composer:?)\s+/i.test(x)).join('\n');
 const sub = p => [p.composer, p.date].filter(Boolean).join(' · ');
+const VOICE_RE = {
+  s: /\bsopran[oe]?s?\b|\bsops?\b|^s\d?$|\bdessus\b/,
+  a: /\b(?:contr)?altos?\b|\balts?\b|haute.contre|^a\d?$/,
+  t: /\bten(?:or|ore)?s?\b|^t\d?$/,
+  b: /\bbass(?:es?|o|i)?\b|^b\d?$/
+};
+const voiceTrack = () => { const re = VOICE_RE[myVoice]; return re ? tracks.find(t => re.test(norm(t.label))) || tracks.find(t => re.test(norm(t.name))) || null : null; };
+function setMine(key, persist) {
+  mine = key; if (persist) sessionStorage.setItem('mine:' + cur.id, mine);
+  rec = []; res = null; barStore = {}; renderRes();
+  app.querySelectorAll('.trow').forEach(x => x.classList.toggle('me', x.dataset.k === mine));
+  app.querySelectorAll('[name=me]').forEach(r => { r.checked = r.value === mine; }); dirty = true;
+}
+const COG = (() => {
+  const n = 8, ro = 11, ri = 8, pt = (r, a) => (12 + r * Math.cos(a)).toFixed(2) + ' ' + (12 + r * Math.sin(a)).toFixed(2); let d = '';
+  for (let i = 0; i < n; i++) { const a = i * 2 * Math.PI / n; d += (i ? 'L' : 'M') + pt(ri, a - .32) + 'L' + pt(ro, a - .2) + 'L' + pt(ro, a + .2) + 'L' + pt(ri, a + .32); }
+  return d + 'ZM15.5 12a3.5 3.5 0 1 0-7 0 3.5 3.5 0 1 0 7 0Z';
+})();
 async function listView() {
   loopId++; stop(); app.className = 'narrow'; document.title = TITLE0;
   tipHide(); app.innerHTML = `<h1>${esc(tt('app'))}${tipBtn(appTip(), tt('aboutApp'))}</h1><div id="l">${tt('loading')}</div>`;
@@ -385,6 +422,7 @@ async function openPiece(id) {
   try { vol = JSON.parse(localStorage.getItem('vol:' + id) || '{}'); } catch (e) { vol = {}; }
   tracks.forEach(t => { if (typeof vol[t.key] !== 'number') vol[t.key] = 1; });
   mine = sessionStorage.getItem('mine:' + id); if (!tracks.some(t => t.key === mine)) mine = null;
+  if (!mine) { const vt = voiceTrack(); if (vt) mine = vt.key; }
   muted = new Set(); solo = new Set(); gains = {}; startPos = 0; rec = []; res = null; barStore = {}; app.className = ''; playerView();
 }
 
@@ -393,7 +431,7 @@ function playerView() {
   app.innerHTML = `<div class="bar" style="margin-top:0"><button id="back">${tt('pieces')}</button><div class="pickw"><div class="pick"><input type="text" id="ps" value="${esc(cur.title)}" title="${esc(cur.title)}" autocomplete="off" aria-label="${esc(tt('pickAria'))}"><div id="pl" class="plist hide"></div></div>${sub(cur) || cur.info ? tipBtn(pieceTip(cur), tt('aboutPiece')) : ''}</div><button id="helpb">${tt('help')}</button></div>
   <div class="bar"><button id="play" class="p">${tt('play')}</button><button id="home" aria-label="${esc(tt('toStart'))}">${tt('start')}</button><button id="mic" aria-pressed="${micOn}">${micHTML()}</button><button id="rs">${tt('reset')}</button>
     <label class="mut"><input type="checkbox" id="ci" checked> ${tt('countIn')}</label>
-    <label class="mut">${tt('latency')} <input id="lat" type="number" min="0" max="500" step="10" value="${Math.round(lat * 1000)}" style="width:68px;min-height:36px">ms</label><span class="mut">${tt('bar')}</span><button id="bp" aria-label="${esc(tt('prevBar'))}">−</button><input id="bar" type="number" min="1" max="${song.measures.length}" value="1" style="width:58px;min-height:36px;text-align:center"><button id="bn" aria-label="${esc(tt('nextBar'))}">+</button><span class="mut" id="bpm"></span>${tipBtn(tt('hint').split(/(?<=\.)\s+/).map(x => `<div>${esc(x)}</div>`).join(''), tt('tips'))}</div>
+    <button id="setb" aria-label="${esc(tt('settings'))}" title="${esc(tt('settings'))}"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="${COG}"/></svg></button><span class="mut">${tt('bar')}</span><button id="bp" aria-label="${esc(tt('prevBar'))}">−</button><input id="bar" type="number" min="1" max="${song.measures.length}" value="1" style="width:58px;min-height:36px;text-align:center"><button id="bn" aria-label="${esc(tt('nextBar'))}">+</button><span class="mut" id="bpm"></span>${tipBtn(tt('hint').split(/(?<=\.)\s+/).map(x => `<div>${esc(x)}</div>`).join(''), tt('tips'))}</div>
   <div class="bar"><label class="mut">${tt('volume')} <input id="mv" type="range" min="0" max="150" step="5" value="${Math.round(mvol * 100)}"></label><label class="mut">${tt('tempo')} <input id="tp" type="range" min="25" max="250" step="5" value="${Math.round(tempo * 100)}"> <span id="tv">${Math.round(tempo * 100)}%</span></label>
     <button id="t100">100%</button><button id="zo" aria-label="${esc(tt('zoomOut'))}">−</button><button id="zi" aria-label="${esc(tt('zoomIn'))}">+</button><button id="zf">${tt('fit')}</button></div>
   <div class="split"><div class="tlwrap"><div class="tl"><div class="gut"><div class="sp" style="height:${RH}px"></div>${tracks.map(t => `<div class="trow ${t.key === mine ? 'me' : ''}" data-k="${t.key}" style="height:${LH}px">
@@ -405,10 +443,9 @@ function playerView() {
   <div class="meter"><div class="zone"></div><div class="mid"></div><div class="needle" id="nd"></div></div></div></div>
   <div id="res" class="card"></div>
   <div class="mut" id="sc"></div>`;
-  $('#back').onclick = () => { location.hash = ''; }; $('#helpb').onclick = e => openHelp(e.currentTarget); bindPicker();
+  $('#back').onclick = () => { location.hash = ''; }; $('#helpb').onclick = e => openHelp(e.currentTarget); $('#setb').onclick = e => openSettings(e.currentTarget); bindPicker();
   app.querySelectorAll('[name=me]').forEach(r => r.onchange = () => {
-    mine = r.value; sessionStorage.setItem('mine:' + cur.id, mine); rec = []; res = null; barStore = {}; renderRes();
-    app.querySelectorAll('.trow').forEach(x => x.classList.toggle('me', x.dataset.k === mine)); dirty = true;
+    setMine(r.value, true);
   });
   app.querySelectorAll('[data-m]').forEach(b => b.onclick = () => {
     const k = b.dataset.m; muted.has(k) ? muted.delete(k) : muted.add(k); refreshMix();
@@ -429,7 +466,6 @@ function playerView() {
   });
   $('#mv').oninput = e => { mvol = e.target.value / 100; if (master && playing) master.gain.value = mvol; try { localStorage.setItem('mvol', mvol); } catch (_) { } };
   $('#mv').ondblclick = () => { $('#mv').value = 100; $('#mv').oninput({ target: $('#mv') }); };
-  $('#lat').onchange = e => { lat = Math.max(0, Math.min(500, +e.target.value || 0)) / 1000; try { localStorage.setItem('lat', lat); } catch (_) { } };
   $('#play').onclick = toggle; $('#mic').onclick = toggleMic;
   $('#tp').oninput = e => setTempo(e.target.value / 100);
   $('#tp').onchange = () => { if (playing) startPlay(Math.max(posNow(), anchorPos), false, true); };
@@ -637,20 +673,94 @@ const helpSvg = {
 let helpOpener = null;
 function closeHelp() {
   const o = $('#hv'); if (!o) return;
-  o.remove(); document.body.style.overflow = '';
+  calibCancel(); o.remove(); document.body.style.overflow = '';
   if (helpOpener && helpOpener.isConnected) helpOpener.focus();
   helpOpener = null;
 }
-function openHelp(opener) {
+function openModal(opener, title, body) {
   closeHelp(); tipHide();
-  const steps = [['me', 'h1t', 'h1d'], ['mic', 'h2t', 'h2d'], ['play', 'h3t', 'h3d'], ['live', 'h4t', 'h4d']];
   const ov = document.createElement('div'); ov.id = 'hv'; ov.className = 'ov';
   ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-labelledby', 'ht');
-  ov.innerHTML = `<div class="hp"><button class="x" aria-label="${esc(tt('close'))}">×</button><h2 id="ht">${esc(tt('hTitle'))}</h2><ol class="hs">${steps.map(([k, a, b]) => `<li>${helpSvg[k]()}<div><b>${esc(tt(a))}</b><span>${esc(tt(b))}</span></div></li>`).join('')}</ol></div>`;
+  ov.innerHTML = `<div class="hp"><button class="x" aria-label="${esc(tt('close'))}">×</button><h2 id="ht">${esc(title)}</h2>${body}</div>`;
   document.body.appendChild(ov); document.body.style.overflow = 'hidden'; helpOpener = opener;
   const x = ov.querySelector('.x'); x.focus();
   ov.onclick = e => { if (e.target === ov || e.target === x) closeHelp(); };
-  ov.onkeydown = e => { if (e.key === 'Escape') closeHelp(); else if (e.key === 'Tab') { e.preventDefault(); x.focus(); } };
+  ov.onkeydown = e => { if (e.key === 'Escape') closeHelp(); else if (e.key === 'Tab') { const f = [...ov.querySelectorAll('button:not(:disabled),input,select')], i = f.indexOf(document.activeElement); e.preventDefault(); f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus(); } };
+  return ov;
+}
+function openHelp(opener) {
+  const steps = [['me', 'h1t', 'h1d'], ['mic', 'h2t', 'h2d'], ['play', 'h3t', 'h3d'], ['live', 'h4t', 'h4d']];
+  openModal(opener, tt('hTitle'), `<ol class="hs">${steps.map(([k, a, b]) => `<li>${helpSvg[k]()}<div><b>${esc(tt(a))}</b><span>${esc(tt(b))}</span></div></li>`).join('')}</ol>`);
+}
+
+/* ---------- settings: my voice + latency (typed or measured) ---------- */
+function openSettings(opener) {
+  openModal(opener, tt('settings'), `<div class="sg"><label for="vc"><b>${esc(tt('voiceLabel'))}</b></label>
+    <select id="vc"><option value="">${esc(tt('voiceNone'))}</option>${['s', 'a', 't', 'b'].map(v => `<option value="${v}" ${myVoice === v ? 'selected' : ''}>${esc(tt('v_' + v))}</option>`).join('')}</select>
+    <div class="mut">${esc(tt('voiceHint'))}</div></div>
+    <div class="sg"><label for="lat"><b>${esc(tt('latency'))}</b></label>
+    <div class="bar" style="margin:6px 0"><input id="lat" type="number" min="0" max="500" step="10" value="${Math.round(lat * 1000)}" style="width:84px;min-height:36px"><span class="mut">ms</span></div>
+    <div class="mut">${esc(tt('latHint'))}</div>
+    <div class="bar"><button id="cal">${esc(tt('calBtn'))}</button></div>
+    <div class="mut">${esc(tt('calHelp'))}</div><div id="calst" role="status" aria-live="polite" style="margin-top:6px"></div></div>`);
+  $('#vc').onchange = e => {
+    myVoice = e.target.value; try { localStorage.setItem('voice', myVoice); } catch (_) { }
+    const vt = voiceTrack(); if (vt && vt.key !== mine) setMine(vt.key, true);
+  };
+  $('#lat').onchange = e => {
+    lat = Math.max(0, Math.min(500, +e.target.value || 0)) / 1000; e.target.value = Math.round(lat * 1000);
+    try { localStorage.setItem('lat', lat); } catch (_) { }
+  };
+  $('#cal').onclick = () => {
+    const b = $('#cal'), st = (m, bad) => { const el = $('#calst'); if (el) { el.textContent = m; el.className = bad ? 'err' : 'mut'; } };
+    b.disabled = true; st('');
+    calibStart(st, r => {
+      const nb = $('#cal'); if (nb) nb.disabled = false;
+      if (r.err) st(tt(r.err, r), true);
+      else { st(tt('calOk', r)); const li = $('#lat'); if (li) li.value = r.ms; }
+    });
+  };
+}
+
+/* ---------- latency test: sing “ta” on each click, measure when the app hears the pitch ---------- */
+const CAL = { n: 10, skip: 2, need: 4 };
+let calib = null;
+function calibCancel() {
+  if (!calib) return;
+  calib.nodes.forEach(o => { try { o.stop(); } catch (e) { } }); calib = null;
+}
+async function calibStart(status, done) {
+  stop(); calibCancel();
+  if (!micOn) await toggleMic();
+  if (!micOn) return done({ err: 'calMic' });
+  await ensureCtx();
+  const t0 = ctx.currentTime + 1.5, clicks = [], nodes = [];
+  for (let i = 0; i < CAL.n; i++) {
+    const c = t0 + i, o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.value = 1500; g.gain.setValueAtTime(0.0001, c);
+    g.gain.exponentialRampToValueAtTime(0.6, c + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, c + 0.07);
+    o.connect(g); g.connect(ctx.destination); o.start(c); o.stop(c + 0.1); clicks.push(c); nodes.push(o);
+  }
+  calib = { clicks, nodes, onsets: [], prev: undefined, shown: 0, status, done }; status(tt('calGet'));
+}
+function calibFeed(med) {
+  const c = calib, now = ctx.currentTime;
+  if (c.prev !== undefined && med && !c.prev) c.onsets.push(now);
+  c.prev = med;
+  const k = c.clicks.filter(x => x <= now).length;
+  if (k > c.shown) { c.shown = k; c.status(tt('calRun', { k, n: CAL.n })); }
+  if (now > c.clicks[CAL.n - 1] + 1) calibFinish();
+}
+function calibFinish() {
+  const c = calib, d = []; calib = null;
+  c.clicks.slice(CAL.skip).forEach(ck => { const o = c.onsets.find(x => x >= ck - 0.12 && x <= ck + 0.7); if (o !== undefined) d.push(o - ck); });
+  if (d.length < CAL.need) return c.done({ err: 'calFew', k: d.length, n: CAL.n - CAL.skip });
+  d.sort((a, b) => a - b);
+  const core = d.length >= 6 ? d.slice(1, -1) : d;
+  if (core[core.length - 1] - core[0] > 0.2) return c.done({ err: 'calBad' });
+  const ms = Math.max(0, Math.min(500, Math.round(median(core) * 1000)));
+  lat = ms / 1000; try { localStorage.setItem('lat', lat); } catch (_) { }
+  c.done({ ms, k: d.length });
 }
 
 /* ---------- semitone keys beside the live view (same pitch axis as the live canvas) ---------- */
@@ -857,6 +967,7 @@ function frame(id) {
   if (micOn) {
     if ((fc++ & 1) === 0) { an.getFloatTimeDomainData(abuf); hist.push(track(detect(abuf, ctx.sampleRate))); if (hist.length > 5) hist.shift(); }
     const v = hist.filter(x => x).sort((a, b) => a - b), med = v.length >= 3 ? v[v.length >> 1] : 0;
+    if (calib) calibFeed(med);
     const lvEl = $('#lvl'); if (lvEl) lvEl.textContent = tt('micLevel') + ' ' + '▮'.repeat(Math.max(0, Math.min(10, Math.round(Math.log10(Math.max(lastRms, 1e-4) / 1e-4) * 2.5)))).padEnd(10, '▯') + (med ? ' · ' + Math.round(med) + ' Hz' : ' · ' + tt('noPitch'));
     let target = null; const live = playing && posNow() >= anchorPos, ts = posNow() - lat * tempo;
     if (live && mine) { const t = tracks.find(x => x.key === mine), n = t && t.notes.find(n => n.t <= ts && ts < n.t + n.d); if (n) target = n.m; }
