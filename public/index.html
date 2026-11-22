@@ -147,6 +147,7 @@ const L = {
     editPiece: 'Edit piece', newPiece: 'New piece', title: 'Title', composer: 'Composer', date: 'Date',
     otherPh: 'Other info: arranger, key, language, notes…', otherAria: 'Other info', up: 'Move up', down: 'Move down',
     label: 'Label', defInst: 'Default instrument', hide: 'Hide', save: 'Save', cancel: 'Cancel', notesN: '{n} notes',
+    micOffTitle: 'Turn off the microphone?', micOffText: 'Your singing will no longer be analysed: the live view stops following your voice and no new results are recorded. Results already collected are kept, and you can turn the mic back on at any time.', micOffBtn: 'Turn off mic',
     langLabel: 'Language', langNote: 'Applies to everyone using this server.',
     settings: 'Settings', voiceLabel: 'My voice', voiceNone: 'Not set', v_s: 'Soprano', v_a: 'Alto', v_t: 'Tenor', v_b: 'Bass',
     voiceHint: 'The matching track is ticked as “Me” when you open a piece.',
@@ -186,6 +187,7 @@ const L = {
     editPiece: 'Modifier le morceau', newPiece: 'Nouveau morceau', title: 'Titre', composer: 'Compositeur', date: 'Date',
     otherPh: 'Autres infos\u00a0: arrangeur, tonalité, langue, notes…', otherAria: 'Autres infos', up: 'Monter', down: 'Descendre',
     label: 'Nom', defInst: 'Instrument par défaut', hide: 'Masquer', save: 'Enregistrer', cancel: 'Annuler', notesN: '{n} notes',
+    micOffTitle: 'Couper le micro\u00a0?', micOffText: 'Votre chant ne sera plus analysé\u00a0: la vue en direct ne suit plus votre voix et aucun nouveau résultat n’est enregistré. Les résultats déjà obtenus sont conservés, et vous pouvez rallumer le micro à tout moment.', micOffBtn: 'Couper le micro',
     langLabel: 'Langue', langNote: 'S’applique à tous les utilisateurs de ce serveur.',
     settings: 'Réglages', voiceLabel: 'Ma voix', voiceNone: 'Non définie', v_s: 'Soprano', v_a: 'Alto', v_t: 'Ténor', v_b: 'Basse',
     voiceHint: 'La piste correspondante est cochée «\u00a0Moi\u00a0» à l’ouverture d’un morceau.',
@@ -471,7 +473,7 @@ function playerView() {
   });
   $('#mv').oninput = e => { mvol = e.target.value / 100; if (master && playing) master.gain.value = mvol; try { localStorage.setItem('mvol', mvol); } catch (_) { } };
   $('#mv').ondblclick = () => { $('#mv').value = 100; $('#mv').oninput({ target: $('#mv') }); };
-  $('#play').onclick = toggle; $('#mic').onclick = toggleMic;
+  $('#play').onclick = toggle; $('#mic').onclick = e => micOn ? confirmMicOff(e.currentTarget) : toggleMic();
   $('#tp').oninput = e => setTempo(e.target.value / 100);
   $('#tp').onchange = () => { if (playing) startPlay(Math.max(posNow(), anchorPos), false, true); };
   $('#bar').onchange = e => { const m = song.measures[Math.max(1, Math.min(+e.target.value || 1, song.measures.length)) - 1]; seek(m.t); reveal(m.t); e.target.blur(); };
@@ -920,9 +922,27 @@ async function toggleMic() {
   try {
     await ensureCtx();
     const s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
-    an = ctx.createAnalyser(); an.fftSize = 4096; ctx.createMediaStreamSource(s).connect(an);
+    an = ctx.createAnalyser(); an.fftSize = 4096; micStream = s; micSrc = ctx.createMediaStreamSource(s); micSrc.connect(an);
     micOn = true; $('#mic').innerHTML = micHTML(); $('#mic').setAttribute('aria-pressed', 'true');
   } catch (e) { $('#sc').innerHTML = `<span class="err">${esc(tt('micErr', { e: e.message }))}</span>`; }
+}
+let micStream = null, micSrc = null;
+function micOff() {
+  if (playing) finishRun();
+  micOn = false; calibCancel();
+  if (micStream) micStream.getTracks().forEach(t => t.stop());
+  if (micSrc) micSrc.disconnect();
+  micStream = micSrc = an = null; hist = [];
+  const b = $('#mic'); if (b) { b.innerHTML = micHTML(); b.setAttribute('aria-pressed', 'false'); }
+  const set = (id, f) => { const el = $(id); if (el) f(el); };
+  set('#det', e => { e.textContent = '–'; }); set('#tgt', e => { e.textContent = '–'; }); set('#lvl', e => { e.textContent = ''; });
+  set('#nd', e => { e.style.left = '50%'; e.style.background = ''; }); dirty = true;
+}
+function confirmMicOff(opener) {
+  openModal(opener, tt('micOffTitle'), `<p class="mut" style="margin:0 0 14px">${esc(tt('micOffText'))}</p><div class="bar" style="margin:0 0 16px"><button id="moff" class="p">${esc(tt('micOffBtn'))}</button><button id="mcan">${esc(tt('cancel'))}</button></div>`);
+  $('#mcan').focus();
+  $('#mcan').onclick = closeHelp;
+  $('#moff').onclick = () => { closeHelp(); micOff(); };
 }
 let lastRms = 0;
 function detect(buf, sr) {
