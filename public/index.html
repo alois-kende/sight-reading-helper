@@ -49,7 +49,8 @@ textarea{background:var(--card);border:1px solid var(--line);border-radius:8px;p
 select{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:6px;font:inherit;min-height:32px}
 .tl{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card)}
 .gut{flex:0 0 190px;border-right:1px solid var(--line)}
-.gut .sp{border-bottom:1px solid var(--line)}
+.gut .sp{display:flex;align-items:center;justify-content:flex-end;padding-right:8px;border-bottom:1px solid var(--line)}
+.gut .sp button{min-height:20px;padding:0 7px;font-size:12px;line-height:1}
 .trow{padding:5px 6px;border-bottom:1px solid var(--line);overflow:hidden}
 .trow.me{background:var(--zone)}
 .trow .lb{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -123,8 +124,8 @@ const L = {
     pickAria: 'Choose a piece: search by title, composer, date or info',
     pieces: 'Pieces', aboutApp: 'About this app', aboutPiece: 'About this piece',
     notFound: 'Piece not found.', backList: 'Back to the list',
-    play: 'Play', stop: 'Stop', start: '⏮ Start', toStart: 'Back to start',
-    micOn: 'Mic: on', micOff: 'Mic: off', reset: 'Reset results', countIn: 'Count-in', latency: 'Latency',
+    play: 'Play', stop: 'Stop', toStart: 'Back to start',
+    micOn: 'Mic: on', micOff: 'Mic: off', countIn: 'Count-in', countInHint: 'Plays one bar of clicks before the music starts, so you can come in on time.', latency: 'Latency',
     bar: 'Bar', prevBar: 'Previous bar', nextBar: 'Next bar', volume: 'Volume', tempo: 'Tempo',
     mute: 'Mute', solo: 'Solo', me: 'Me', instrument: 'Instrument',
     i_sine: 'Sine', i_piano: 'Piano', i_organ: 'Organ', i_choir: 'Choir', i_strings: 'Strings', i_flute: 'Flute',
@@ -162,8 +163,8 @@ const L = {
     pickAria: 'Choisir un morceau\u00a0: recherche par titre, compositeur, date ou infos',
     pieces: 'Morceaux', aboutApp: 'À propos de l’application', aboutPiece: 'À propos de ce morceau',
     notFound: 'Morceau introuvable.', backList: 'Retour à la liste',
-    play: 'Lecture', stop: 'Stop', start: '⏮ Début', toStart: 'Retour au début',
-    micOn: 'Micro\u00a0: on', micOff: 'Micro\u00a0: off', reset: 'Réinitialiser les résultats', countIn: 'Décompte', latency: 'Latence',
+    play: 'Lecture', stop: 'Stop', toStart: 'Retour au début',
+    micOn: 'Micro\u00a0: on', micOff: 'Micro\u00a0: off', countIn: 'Décompte', countInHint: 'Joue une mesure de clics avant le début de la musique pour entrer au bon moment.', latency: 'Latence',
     bar: 'Mesure', prevBar: 'Mesure précédente', nextBar: 'Mesure suivante', volume: 'Volume', tempo: 'Tempo',
     mute: 'Muet', solo: 'Solo', me: 'Moi', instrument: 'Instrument',
     i_sine: 'Sinus', i_piano: 'Piano', i_organ: 'Orgue', i_choir: 'Chœur', i_strings: 'Cordes', i_flute: 'Flûte',
@@ -333,6 +334,7 @@ let tempo = 1, ctx, master, lfoG, gains = {}, playing = false, startPos = 0, anc
 let rec = [], res = null, barStore = {}, lat = 0.12, mvol = 1, an, micOn = false, hist = [], okN = 0, totN = 0, loopId = 0, view = { t0: 0, pps: 50 }, dirty = true;
 const LH = 60, RH = 26, TH = 34, Y0 = RH;
 try { const sv = localStorage.getItem("lat"); if (sv !== null) lat = +sv; const mv = localStorage.getItem("mvol"); if (mv !== null) mvol = +mv; } catch (e) { }
+let countIn = true; try { const ci = localStorage.getItem('ci'); if (ci !== null) countIn = ci === '1'; } catch (e) { }
 let myVoice = ''; try { myVoice = localStorage.getItem('voice') || ''; if (!['', 's', 'a', 't', 'b'].includes(myVoice)) myVoice = ''; } catch (e) { }
 
 const audible = k => !muted.has(k) && (!solo.size || solo.has(k));
@@ -432,13 +434,12 @@ async function openPiece(id) {
 
 function playerView() {
   const opts = k => Object.keys(INST).map(v => `<option value="${v}" ${inst[k] === v ? 'selected' : ''}>${tt('i_' + v)}</option>`).join('');
-  app.innerHTML = `<div class="bar" style="margin-top:0"><button id="back">${tt('pieces')}</button><div class="pickw"><div class="pick"><input type="text" id="ps" value="${esc(cur.title)}" title="${esc(cur.title)}" autocomplete="off" aria-label="${esc(tt('pickAria'))}"><div id="pl" class="plist hide"></div></div>${sub(cur) || cur.info ? tipBtn(pieceTip(cur), tt('aboutPiece')) : ''}</div><button id="helpb">${tt('help')}</button></div>
-  <div class="bar"><button id="play" class="p">${tt('play')}</button><button id="home" aria-label="${esc(tt('toStart'))}">${tt('start')}</button><button id="mic" aria-pressed="${micOn}">${micHTML()}</button><button id="rs">${tt('reset')}</button>
-    <label class="mut"><input type="checkbox" id="ci" checked> ${tt('countIn')}</label>
-    <button id="setb" aria-label="${esc(tt('settings'))}" title="${esc(tt('settings'))}"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="${COG}"/></svg></button></div>
+  app.innerHTML = `<div class="bar" style="margin-top:0"><button id="back">${tt('pieces')}</button><div class="pickw"><div class="pick"><input type="text" id="ps" value="${esc(cur.title)}" title="${esc(cur.title)}" autocomplete="off" aria-label="${esc(tt('pickAria'))}"><div id="pl" class="plist hide"></div></div>${sub(cur) || cur.info ? tipBtn(pieceTip(cur), tt('aboutPiece')) : ''}</div><button id="setb" aria-label="${esc(tt('settings'))}" title="${esc(tt('settings'))}"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="${COG}"/></svg></button><button id="helpb">${tt('help')}</button></div>
+  <div class="bar"><button id="play" class="p">${tt('play')}</button><button id="mic" aria-pressed="${micOn}">${micHTML()}</button>
+    </div>
   <div class="bar mix"><label class="mut">${tt('volume')} <input id="mv" type="range" min="0" max="150" step="5" value="${Math.round(mvol * 100)}"></label><label class="mut">${tt('tempo')} <input id="tp" type="range" min="25" max="250" step="5" value="${Math.round(tempo * 100)}"><span id="tv">${Math.round(tempo * 100)}%</span><span id="bpm"></span></label>
     <span class="grp"><span class="mut">${tt('bar')}</span><button id="bp" aria-label="${esc(tt('prevBar'))}">−</button><input id="bar" type="number" min="1" max="${song.measures.length}" value="1" style="width:58px;min-height:36px;text-align:center"><button id="bn" aria-label="${esc(tt('nextBar'))}">+</button>${tipBtn(tt('hint').split(/(?<=\.)\s+/).map(x => `<div>${esc(x)}</div>`).join(''), tt('tips'))}</span></div>
-  <div class="split"><div class="tlwrap"><div class="tl"><div class="gut"><div class="sp" style="height:${RH}px"></div>${tracks.map(t => `<div class="trow ${t.key === mine ? 'me' : ''}" data-k="${t.key}" style="height:${LH}px">
+  <div class="split"><div class="tlwrap"><div class="tl"><div class="gut"><div class="sp" style="height:${RH}px"><button id="home" aria-label="${esc(tt('toStart'))}" title="${esc(tt('toStart'))}">⏮</button></div>${tracks.map(t => `<div class="trow ${t.key === mine ? 'me' : ''}" data-k="${t.key}" style="height:${LH}px">
     <div class="top"><span class="lb">${esc(t.label)}</span><input type="range" class="vol" data-v="${t.key}" min="0" max="150" step="5" value="${Math.round(vol[t.key] * 100)}" aria-label="${esc(tt('volume'))}"></div><div class="ctl"><button data-m="${t.key}" aria-label="${esc(tt('mute'))}">M</button><button data-s="${t.key}" aria-label="${esc(tt('solo'))}" aria-pressed="false">S</button>
     <label><input type="radio" name="me" value="${t.key}" ${t.key === mine ? 'checked' : ''}> ${tt('me')}</label>
     <select data-i="${t.key}" aria-label="${esc(tt('instrument'))}">${opts(t.key)}</select></div></div>`).join('')}<div class="trow" style="height:${TH}px;display:flex;align-items:center;gap:8px"><span class="lb" style="flex:none">${tt('tempo')}</span><span class="mut" id="tcur" style="font-size:12px"></span></div></div>
@@ -477,7 +478,6 @@ function playerView() {
   const step = d => { const pp = playing ? Math.max(posNow(), anchorPos) : startPos, t = song.measures[Math.max(0, Math.min(barIdx(pp) + d, song.measures.length - 1))].t; seek(t); reveal(t); };
   $('#bp').onclick = () => step(-1); $('#bn').onclick = () => step(1);
   $('#home').onclick = () => { seek(0); reveal(0); };
-  $('#rs').onclick = () => { rec = []; res = null; barStore = {}; hist = []; resetTrack(); renderRes(); dirty = true; };
   bindTl(); fitView(); bindKb(); refreshMix(); renderRes(); loopId++; frame(loopId);
 }
 
@@ -586,7 +586,7 @@ function ensureCtx() {
   ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
   return ctx.resume();
 }
-async function play() { await ensureCtx(); startPlay(startPos, $('#ci').checked); }
+async function play() { await ensureCtx(); startPlay(startPos, countIn); }
 function startPlay(pos, ci, keep) {
   if (playing && !keep) finishRun();
   killVoices(); fx = {}; if (master) { master.disconnect(); }
@@ -699,6 +699,8 @@ function openSettings(opener) {
   openModal(opener, tt('settings'), `<div class="sg"><label for="vc"><b>${esc(tt('voiceLabel'))}</b></label>
     <select id="vc"><option value="">${esc(tt('voiceNone'))}</option>${['s', 'a', 't', 'b'].map(v => `<option value="${v}" ${myVoice === v ? 'selected' : ''}>${esc(tt('v_' + v))}</option>`).join('')}</select>
     <div class="mut">${esc(tt('voiceHint'))}</div></div>
+    <div class="sg"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="ci" ${countIn ? 'checked' : ''}><b>${esc(tt('countIn'))}</b></label>
+    <div class="mut" style="margin-top:4px">${esc(tt('countInHint'))}</div></div>
     <div class="sg"><label for="lat"><b>${esc(tt('latency'))}</b></label>
     <div class="bar" style="margin:6px 0"><input id="lat" type="number" min="0" max="500" step="10" value="${Math.round(lat * 1000)}" style="width:84px;min-height:36px"><span class="mut">ms</span></div>
     <div class="mut">${esc(tt('latHint'))}</div>
@@ -708,6 +710,7 @@ function openSettings(opener) {
     myVoice = e.target.value; try { localStorage.setItem('voice', myVoice); } catch (_) { }
     const vt = voiceTrack(); if (vt && vt.key !== mine) setMine(vt.key, true);
   };
+  $('#ci').onchange = e => { countIn = e.target.checked; try { localStorage.setItem('ci', countIn ? '1' : '0'); } catch (_) { } };
   $('#lat').onchange = e => {
     lat = Math.max(0, Math.min(500, +e.target.value || 0)) / 1000; e.target.value = Math.round(lat * 1000);
     try { localStorage.setItem('lat', lat); } catch (_) { }
