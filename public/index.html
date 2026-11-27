@@ -148,6 +148,9 @@ const L = {
     otherPh: 'Other info: arranger, key, language, notes…', otherAria: 'Other info', up: 'Move up', down: 'Move down',
     label: 'Label', defInst: 'Default instrument', hide: 'Hide', save: 'Save', cancel: 'Cancel', notesN: '{n} notes',
     micOffTitle: 'Turn off the microphone?', micOffText: 'Your singing will no longer be analysed: the live view stops following your voice and no new results are recorded. Results already collected are kept, and you can turn the mic back on at any time.', micOffBtn: 'Turn off mic',
+    modeAria: 'Mixer mode', modeNormal: 'Normal mode', modeFocus: 'Focus on my part', modeAcc: 'Accompaniment only', modeChoir: 'Choir only',
+    modeNoMe: 'Tick “Me” on a track first, then choose this mode.',
+    modeNoChoir: 'No choir track recognised in this piece (label them Soprano, Alto, Tenor, Bass in the admin).',
     langLabel: 'Language', langNote: 'Applies to everyone using this server.',
     settings: 'Settings', voiceLabel: 'My voice', voiceNone: 'Not set', v_s: 'Soprano', v_a: 'Alto', v_t: 'Tenor', v_b: 'Bass',
     voiceHint: 'The matching track is ticked as “Me” when you open a piece.',
@@ -188,6 +191,9 @@ const L = {
     otherPh: 'Autres infos\u00a0: arrangeur, tonalité, langue, notes…', otherAria: 'Autres infos', up: 'Monter', down: 'Descendre',
     label: 'Nom', defInst: 'Instrument par défaut', hide: 'Masquer', save: 'Enregistrer', cancel: 'Annuler', notesN: '{n} notes',
     micOffTitle: 'Couper le micro\u00a0?', micOffText: 'Votre chant ne sera plus analysé\u00a0: la vue en direct ne suit plus votre voix et aucun nouveau résultat n’est enregistré. Les résultats déjà obtenus sont conservés, et vous pouvez rallumer le micro à tout moment.', micOffBtn: 'Couper le micro',
+    modeAria: 'Mode de mixage', modeNormal: 'Mode normal', modeFocus: 'Ma partie en avant', modeAcc: 'Accompagnement seul', modeChoir: 'Chœur seul',
+    modeNoMe: 'Cochez «\u00a0Moi\u00a0» sur une piste, puis choisissez ce mode.',
+    modeNoChoir: 'Aucune piste de chœur reconnue dans ce morceau (nommez-les Soprano, Alto, Ténor, Basse dans l’administration).',
     langLabel: 'Langue', langNote: 'S’applique à tous les utilisateurs de ce serveur.',
     settings: 'Réglages', voiceLabel: 'Ma voix', voiceNone: 'Non définie', v_s: 'Soprano', v_a: 'Alto', v_t: 'Ténor', v_b: 'Basse',
     voiceHint: 'La piste correspondante est cochée «\u00a0Moi\u00a0» à l’ouverture d’un morceau.',
@@ -336,6 +342,7 @@ let tempo = 1, ctx, master, lfoG, gains = {}, playing = false, startPos = 0, anc
 let rec = [], res = null, barStore = {}, lat = 0.17, mvol = 1, an, micOn = false, hist = [], okN = 0, totN = 0, loopId = 0, view = { t0: 0, pps: 50 }, dirty = true;
 const LH = 60, RH = 26, TH = 34, Y0 = RH;
 try { const sv = localStorage.getItem("lat"); if (sv !== null) lat = +sv; const mv = localStorage.getItem("mvol"); if (mv !== null) mvol = +mv; } catch (e) { }
+let mode = 'normal';
 let countIn = true; try { const ci = localStorage.getItem('ci'); if (ci !== null) countIn = ci === '1'; } catch (e) { }
 let myVoice = ''; try { myVoice = localStorage.getItem('voice') || ''; if (!['', 's', 'a', 't', 'b'].includes(myVoice)) myVoice = ''; } catch (e) { }
 
@@ -374,6 +381,28 @@ function setMine(key, persist) {
   rec = []; res = null; barStore = {}; renderRes();
   app.querySelectorAll('.trow').forEach(x => x.classList.toggle('me', x.dataset.k === mine));
   app.querySelectorAll('[name=me]').forEach(r => { r.checked = r.value === mine; }); dirty = true;
+}
+const MODES = ['normal', 'focus', 'acc', 'choir'];
+const isChoir = t => t.inst === 'choir' || Object.values(VOICE_RE).some(re => re.test(norm(t.label)) || re.test(norm(t.name)));
+const modeMutes = m => new Set((m === 'acc' ? tracks.filter(isChoir) : m === 'choir' && tracks.some(isChoir) ? tracks.filter(t => !isChoir(t)) : []).map(t => t.key));
+function loadMode(id) {
+  let m = 'normal'; try { m = localStorage.getItem('mode:' + id) || 'normal'; } catch (e) { }
+  mode = MODES.includes(m) ? m : 'normal'; muted = modeMutes(mode);
+}
+// Presets: they set mutes, solos and volumes in one go; everything stays adjustable by hand afterwards.
+function applyMode(m) {
+  const sel = $('#mode'), msg = $('#modemsg'), say = k => {
+    if (sel) sel.value = mode;
+    if (msg) { const x = tt(k); msg.textContent = x; setTimeout(() => { if (msg.isConnected && msg.textContent === x) msg.textContent = ''; }, 6000); }
+  };
+  if (m === 'focus' && !mine) return say('modeNoMe');
+  if ((m === 'acc' || m === 'choir') && !tracks.some(isChoir)) return say('modeNoChoir');
+  if (msg) msg.textContent = '';
+  mode = m; solo = new Set(); muted = modeMutes(m);
+  tracks.forEach(t => { vol[t.key] = m === 'focus' ? (t.key === mine ? 1.5 : 0.3) : 1; });
+  try { localStorage.setItem('vol:' + cur.id, JSON.stringify(vol)); localStorage.setItem('mode:' + cur.id, m); } catch (e) { }
+  app.querySelectorAll('[data-v]').forEach(r => { r.value = Math.round(vol[r.dataset.v] * 100); });
+  refreshMix();
 }
 const COG = (() => {
   const n = 8, ro = 11, ri = 8, pt = (r, a) => (12 + r * Math.cos(a)).toFixed(2) + ' ' + (12 + r * Math.sin(a)).toFixed(2); let d = '';
@@ -431,13 +460,13 @@ async function openPiece(id) {
   tracks.forEach(t => { if (typeof vol[t.key] !== 'number') vol[t.key] = 1; });
   mine = sessionStorage.getItem('mine:' + id); if (!tracks.some(t => t.key === mine)) mine = null;
   if (!mine) { const vt = voiceTrack(); if (vt) mine = vt.key; }
-  muted = new Set(); solo = new Set(); gains = {}; startPos = 0; rec = []; res = null; barStore = {}; app.className = ''; playerView();
+  solo = new Set(); loadMode(id); gains = {}; startPos = 0; rec = []; res = null; barStore = {}; app.className = ''; playerView();
 }
 
 function playerView() {
   const opts = k => Object.keys(INST).map(v => `<option value="${v}" ${inst[k] === v ? 'selected' : ''}>${tt('i_' + v)}</option>`).join('');
   app.innerHTML = `<div class="bar" style="margin-top:0"><button id="back">${tt('pieces')}</button><div class="pickw"><div class="pick"><input type="text" id="ps" value="${esc(cur.title)}" title="${esc(cur.title)}" autocomplete="off" aria-label="${esc(tt('pickAria'))}"><div id="pl" class="plist hide"></div></div>${sub(cur) || cur.info ? tipBtn(pieceTip(cur), tt('aboutPiece')) : ''}</div><button id="setb" aria-label="${esc(tt('settings'))}" title="${esc(tt('settings'))}"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="${COG}"/></svg></button><button id="helpb">${tt('help')}</button></div>
-  <div class="bar"><button id="play" class="p">${tt('play')}</button><button id="mic" aria-pressed="${micOn}">${micHTML()}</button>
+  <div class="bar"><button id="play" class="p">${tt('play')}</button><button id="mic" aria-pressed="${micOn}">${micHTML()}</button><select id="mode" aria-label="${esc(tt('modeAria'))}">${MODES.map(m => `<option value="${m}" ${mode === m ? 'selected' : ''}>${esc(tt('mode' + m[0].toUpperCase() + m.slice(1)))}</option>`).join('')}</select><span class="err" id="modemsg" role="status"></span>
     </div>
   <div class="bar mix"><label class="mut">${tt('volume')} <input id="mv" type="range" min="0" max="150" step="5" value="${Math.round(mvol * 100)}"></label><label class="mut">${tt('tempo')} <input id="tp" type="range" min="25" max="250" step="5" value="${Math.round(tempo * 100)}"><span id="tv">${Math.round(tempo * 100)}%</span><span id="bpm"></span></label>
     <span class="grp"><span class="mut">${tt('bar')}</span><button id="bp" aria-label="${esc(tt('prevBar'))}">−</button><input id="bar" type="number" min="1" max="${song.measures.length}" value="1" style="width:58px;min-height:36px;text-align:center"><button id="bn" aria-label="${esc(tt('nextBar'))}">+</button>${tipBtn(tt('hint').split(/(?<=\.)\s+/).map(x => `<div>${esc(x)}</div>`).join(''), tt('tips'))}</span></div>
@@ -473,6 +502,7 @@ function playerView() {
   });
   $('#mv').oninput = e => { mvol = e.target.value / 100; if (master && playing) master.gain.value = mvol; try { localStorage.setItem('mvol', mvol); } catch (_) { } };
   $('#mv').ondblclick = () => { $('#mv').value = 100; $('#mv').oninput({ target: $('#mv') }); };
+  $('#mode').onchange = e => applyMode(e.target.value);
   $('#play').onclick = toggle; $('#mic').onclick = e => micOn ? confirmMicOff(e.currentTarget) : toggleMic();
   $('#tp').oninput = e => setTempo(e.target.value / 100);
   $('#tp').onchange = () => { if (playing) startPlay(Math.max(posNow(), anchorPos), false, true); };

@@ -12,6 +12,17 @@ Open source, released under the MIT licence.
 
 The live view shows your voice against the notes, so you can see whether you are in tune and on time. The **Help** button on the piece page explains this with pictures.
 
+## Mixer modes
+
+The dropdown next to the Mic button sets the mixer in one go. You can still change volumes, mutes and solos by hand afterwards.
+
+- **Normal mode**: everything unmuted at 100%.
+- **Focus on my part**: the "Me" track at 150%, every other track at 30%.
+- **Accompaniment only**: choir tracks muted.
+- **Choir only**: everything except the choir tracks muted.
+
+Choir tracks are recognised by their label (or MIDI name): Soprano, Alto, Tenor, Bass and their usual variants, or any track whose default instrument is Choir.
+
 ## Settings
 
 The cogwheel button on the piece page opens the personal settings, stored in your browser:
