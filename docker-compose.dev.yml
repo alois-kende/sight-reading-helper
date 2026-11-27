@@ -1,0 +1,18 @@
+# Dev site (dev-dechiffrage.gosa.fr). Separate container, port and data volume from production.
+# Run it from its own folder, or with its own project name so it never touches the production stack:
+#   docker compose -p sight-reading-helper-dev -f docker-compose.dev.yml up -d
+#   docker compose -p sight-reading-helper-dev -f docker-compose.dev.yml pull && docker compose -p sight-reading-helper-dev -f docker-compose.dev.yml up -d
+services:
+  sight-reading-helper-dev:
+    image: ghcr.io/alois-kende/sight-reading-helper:dev
+    container_name: sight-reading-helper-dev
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      ADMIN_PASSWORD: password
+    volumes:
+      - sight-reading-helper-dev-data:/app/data
+
+volumes:
+  sight-reading-helper-dev-data:

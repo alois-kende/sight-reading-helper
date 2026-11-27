@@ -65,13 +65,22 @@ The microphone only works on `localhost` or HTTPS. Serve the app behind Cloudfla
 docker compose pull && docker compose up -d
 ```
 
-## Release
+## Branches and environments
 
-Every push to `main` publishes `ghcr.io/OWNER/REPO:latest`. Pushing a tag such as `v0.1.0` also publishes `0.1.0` and `0.1`:
+One GitHub Actions workflow (`.github/workflows/docker.yml`) builds the image for both branches:
+
+| Branch | Image tag | Use |
+| --- | --- | --- |
+| `main` | `:latest` | production |
+| `dev` | `:dev` | dev site, run with `docker-compose.dev.yml` (own port and data volume) |
+
+Pushing a tag such as `v0.1.0` also publishes `0.1.0` and `0.1`:
 
 ```bash
 git tag v0.1.0 && git push origin v0.1.0
 ```
+
+The ⓘ bubble on the main menu shows the version plus the branch and short commit the image was built from, so you can tell which build is running.
 
 ## Version
 

@@ -4,6 +4,10 @@ WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3000
 
+# Set by the CI (branch and short commit), shown next to the version in the app.
+ARG BUILD_INFO=""
+ENV BUILD_INFO=$BUILD_INFO
+
 COPY --chown=node:node package.json server.js ./
 COPY --chown=node:node public ./public
 
