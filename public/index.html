@@ -1011,6 +1011,29 @@ function track(f) {
   } else if (trk.out !== null && Math.abs(trk.out - m) > 9) o = m + 12 * Math.round((trk.out - m) / 12);
   trk.out = o; return 440 * 2 ** ((o - 69) / 12);
 }
+/* ---------- harmonic check ----------
+   Some vowels fool the pitch detector (typically by about a tone). When the detected pitch is a bit off the expected
+   note, test whether the expected note explains the spectrum clearly better than the detected one (comb of harmonics
+   standing well above the gaps between them). Only then report the expected note, with its real small deviation. */
+const HN = 4096, HW = new Float32Array(HN).map((_, i) => 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (HN - 1)));
+function goertzel(x, f, sr) {
+  const c = 2 * Math.cos(2 * Math.PI * f / sr); let s1 = 0, s2 = 0;
+  for (let i = 0; i < HN; i++) { const s0 = x[i] * HW[i] + c * s1 - s2; s2 = s1; s1 = s0; }
+  return Math.sqrt(Math.max(0, s1 * s1 + s2 * s2 - c * s1 * s2));
+}
+function harmonicFix(f, target, buf, sr) {
+  if (!f || target === null || buf.length < HN) return f;
+  const md = 69 + 12 * Math.log2(f / 440), tref = target + 12 * Math.round((md - target) / 12), d = Math.abs(md - tref);
+  if (d < 0.6 || d > 3.5) return f;
+  const best = F0 => {
+    let bs = -1, bf = F0;
+    for (let c = -40; c <= 40; c += 20) { const F = F0 * Math.pow(2, c / 1200); let s = 0; for (let h = 1; h <= 4; h++) s += goertzel(buf, h * F, sr); if (s > bs) { bs = s; bf = F; } }
+    return [bs, bf];
+  };
+  const [st, ft] = best(440 * Math.pow(2, (tref - 69) / 12)), [sd] = best(f);
+  let gap = 0; for (let h = 1; h <= 4; h++) gap += goertzel(buf, (h + 0.5) * ft, sr);
+  return st >= 1.5 * sd && st >= 3 * gap ? ft : f;
+}
 function frame(id) {
   if (id !== loopId || !$('#cv')) return;
   const pp = playing ? Math.max(posNow(), anchorPos) : startPos;
@@ -1019,12 +1042,12 @@ function frame(id) {
   const bi = $('#bar'); if (document.activeElement !== bi) bi.value = song.measures[barIdx(pp)].n;
   $('#bpm').textContent = '♩=' + Math.round(song.bpmAt(pp) * tempo); $('#tcur').textContent = '♩=' + Math.round(song.bpmAt(pp));
   if (micOn) {
-    if ((fc++ & 1) === 0) { an.getFloatTimeDomainData(abuf); hist.push(track(detect(abuf, ctx.sampleRate))); if (hist.length > 5) hist.shift(); }
+    let target = null; const live = playing && posNow() >= anchorPos, ts = posNow() - lat * tempo;
+    if (live && mine) { const t = tracks.find(x => x.key === mine), n = t && t.notes.find(n => n.t <= ts && ts < n.t + n.d); if (n) target = n.m; }
+    if ((fc++ & 1) === 0) { an.getFloatTimeDomainData(abuf); hist.push(track(harmonicFix(detect(abuf, ctx.sampleRate), target, abuf, ctx.sampleRate))); if (hist.length > 5) hist.shift(); }
     const v = hist.filter(x => x).sort((a, b) => a - b), med = v.length >= 3 ? v[v.length >> 1] : 0;
     if (calib) calibFeed(med);
     const lvEl = $('#lvl'); if (lvEl) lvEl.textContent = tt('micLevel') + ' ' + '▮'.repeat(Math.max(0, Math.min(10, Math.round(Math.log10(Math.max(lastRms, 1e-4) / 1e-4) * 2.5)))).padEnd(10, '▯') + (med ? ' · ' + Math.round(med) + ' Hz' : ' · ' + tt('noPitch'));
-    let target = null; const live = playing && posNow() >= anchorPos, ts = posNow() - lat * tempo;
-    if (live && mine) { const t = tracks.find(x => x.key === mine), n = t && t.notes.find(n => n.t <= ts && ts < n.t + n.d); if (n) target = n.m; }
     let cents = null, m = NaN;
     if (med) {
       m = 69 + 12 * Math.log2(med / 440); const ref = target !== null ? target : Math.round(m);

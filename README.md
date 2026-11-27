@@ -12,6 +12,10 @@ Open source, released under the MIT licence.
 
 The live view shows your voice against the notes, so you can see whether you are in tune and on time. The **Help** button on the piece page explains this with pictures.
 
+## Pitch detection
+
+Everything runs in the browser (YIN-style detector, nothing is sent to the server). Some vowels can fool a detector by about a tone. When the detected pitch is slightly off the expected note, the app checks whether the expected note explains the spectrum clearly better (a clear series of harmonics on that note); only then it reports the expected note, with its real small deviation. A really wrong note is never turned into a right one.
+
 ## Mixer modes
 
 The dropdown next to the Mic button sets the mixer in one go. You can still change volumes, mutes and solos by hand afterwards.
