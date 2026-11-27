@@ -1,7 +1,7 @@
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
 const PORT = process.env.PORT || 3000;
 const PASS = process.env.ADMIN_PASSWORD || 'password';
-const VERSION = require('./package.json').version;
+const VERSION = require('./package.json').version + (process.env.BUILD_INFO ? ' (' + process.env.BUILD_INFO + ')' : '');
 const DATA = path.join(__dirname, 'data');
 fs.mkdirSync(DATA, { recursive: true });
 const DB = path.join(DATA, 'pieces.json');
